@@ -86,9 +86,19 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
     }
   }, [initialItems]);
 
-  // Extract unique columns from participant data
+  // Extract unique columns from participant data (prioritizes workspace.importHeaders order if available)
   const { availableColumnsList, availableColumnNames } = useMemo(() => {
     const colMap = new Map<string, string>(); // colName -> sampleValue
+
+    // Inisialisasi urutan awal dengan importHeaders asli jika ada
+    if (workspace?.importHeaders && Array.isArray(workspace.importHeaders)) {
+      workspace.importHeaders.forEach((h: string) => {
+        if (!h.startsWith("_")) {
+          colMap.set(h, "");
+        }
+      });
+    }
+
     participants.forEach((p: Participant) => {
       if (p.data && typeof p.data === "object") {
         Object.entries(p.data).forEach(([key, val]) => {

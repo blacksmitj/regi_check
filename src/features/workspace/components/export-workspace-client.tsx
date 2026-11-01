@@ -1,17 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import * as XLSX from "xlsx";
-import { Download, ArrowLeft, CheckCircle2 } from "lucide-react";
+import { Download, ArrowLeft, CheckCircle2, FileSpreadsheet, LayoutList } from "lucide-react";
 import { ParticipantStatus, OfficerHistoryItem } from "@/types/domain";
+
+type ExportColumnMode = "import_order" | "form_order";
 
 export function ExportWorkspaceClient({ workspaceId }: { workspaceId: string }) {
   const [filterStatus, setFilterStatus] = useState<"all" | ParticipantStatus>("all");
+  const [columnMode, setColumnMode] = useState<ExportColumnMode>("import_order");
   const [isExported, setIsExported] = useState(false);
 
   const { data: workspace } = useQuery({
@@ -82,31 +85,63 @@ export function ExportWorkspaceClient({ workspaceId }: { workspaceId: string }) 
     return undefined;
   };
 
-  const handleExportExcel = () => {
-    const exportRows = filtered.map((p, idx) => {
-      const resolvedName = resolveParticipantName(p.data);
-      const resolvedNik = resolveParticipantNikOrKey(p.data);
+  // Kumpulan key kolom original ketika di-import (diprioritaskan dari workspace.importHeaders asli)
+  const importOriginalKeys = useMemo(() => {
+    // 1. Jika workspace sudah menyimpan urutan importHeaders asli, prioritaskan itu
+    if (workspace?.importHeaders && Array.isArray(workspace.importHeaders) && workspace.importHeaders.length > 0) {
+      const keysSet = new Set<string>(workspace.importHeaders);
+      // Tambahkan key lain jika ada peserta yang memiliki key tambahan di luar header awal
+      participants.forEach((p) => {
+        if (p.data) {
+          Object.keys(p.data).forEach((key) => {
+            if (!key.startsWith("_")) {
+              keysSet.add(key);
+            }
+          });
+        }
+      });
+      return Array.from(keysSet);
+    }
 
-      const row: Record<string, unknown> = {
-        No: idx + 1,
-        Nama: resolvedName,
-        NIK: resolvedNik,
-        Status: p.status === "complete" ? "Lengkap" : p.status === "rejected" ? "Ditolak" : "Belum Lengkap",
-      };
-
-      formFields
-        .filter((i) => i.active && i.type !== "section")
-        .forEach((field) => {
-          const val = resolveFieldValue(p.data, field);
-          const formattedVal = val !== undefined && val !== null && String(val).trim() !== "" ? String(val) : "-";
-
-          // Hindari menimpa kolom dasar Nama / NIK yang sudah terisi dengan "-" jika ada field form berlabel sama yang kosong
-          if ((field.label === "NIK" || field.label === "Nama") && formattedVal === "-" && row[field.label] && row[field.label] !== "-") {
-            return;
+    // 2. Fallback untuk data lama yang belum memiliki importHeaders di workspace
+    const keysSet = new Set<string>();
+    participants.forEach((p) => {
+      if (p.data) {
+        Object.keys(p.data).forEach((key) => {
+          if (!key.startsWith("_")) {
+            keysSet.add(key);
           }
-
-          row[field.label] = formattedVal;
         });
+      }
+    });
+    return Array.from(keysSet);
+  }, [workspace, participants]);
+
+  // Urutan form fields terurut berdasarkan order & hanya yang aktif non-section
+  const activeSortedFormFields = useMemo(() => {
+    return [...formFields]
+      .filter((f) => f.active && f.type !== "section")
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  }, [formFields]);
+
+  // Helper untuk mendapatkan label judul kolom yang user-friendly
+  const resolveColumnTitle = (rawKey: string): string => {
+    // Cari field form yang cocok baik dari id, excelColumn, atau label
+    const matchedField = formFields.find(
+      (f) =>
+        f.id === rawKey ||
+        f.excelColumn === rawKey ||
+        f.label.trim().toLowerCase() === rawKey.trim().toLowerCase()
+    );
+    if (matchedField && matchedField.label) {
+      return matchedField.label;
+    }
+    return rawKey;
+  };
+
+  const handleExportExcel = () => {
+    const exportRows = filtered.map((p) => {
+      const row: Record<string, unknown> = {};
 
       const historyRaw = p.data["_officerHistory"];
       const historyList: OfficerHistoryItem[] = Array.isArray(historyRaw)
@@ -149,9 +184,58 @@ export function ExportWorkspaceClient({ workspaceId }: { workspaceId: string }) 
             ? `${lastUpdatedBy} (${lastUpdatedAtFormatted})`
             : "-";
 
-      row["Terakhir Diubah Oleh"] = lastUpdatedBy;
-      row["Waktu Update Terakhir"] = lastUpdatedAtFormatted;
-      row["Riwayat Petugas (Awal - Akhir)"] = historyFormatted;
+      const statusText =
+        p.status === "complete"
+          ? "Lengkap"
+          : p.status === "rejected"
+            ? "Ditolak"
+            : "Belum Lengkap";
+
+      if (columnMode === "import_order") {
+        // Mode 1: Sesuai urutan kolom saat import asli + field form tambahan yang belum ada di raw data
+        const addedHeaders = new Set<string>();
+
+        // 1. Kolom dari data import asli (diberi nama UI label jika merupakan custom field)
+        importOriginalKeys.forEach((key) => {
+          const columnHeader = resolveColumnTitle(key);
+          const val = p.data[key];
+          row[columnHeader] = val !== undefined && val !== null && String(val).trim() !== "" ? String(val) : "-";
+          addedHeaders.add(columnHeader);
+        });
+
+        // 2. Kolom tambahan dari form workspace yang belum ada di tabel raw import
+        activeSortedFormFields.forEach((field) => {
+          if (!addedHeaders.has(field.label)) {
+            const val = resolveFieldValue(p.data, field);
+            const formattedVal = val !== undefined && val !== null && String(val).trim() !== "" ? String(val) : "-";
+            row[field.label] = formattedVal;
+            addedHeaders.add(field.label);
+          }
+        });
+
+        // Kolom status verifikasi
+        row["Status"] = statusText;
+
+        // Kolom validasi info petugas di paling belakang
+        row["Terakhir Diubah Oleh"] = lastUpdatedBy;
+        row["Waktu Update Terakhir"] = lastUpdatedAtFormatted;
+        row["Riwayat Petugas (Awal - Akhir)"] = historyFormatted;
+      } else {
+        // Mode 2: Murni sesuai urutan atur form workspace
+        activeSortedFormFields.forEach((field) => {
+          const val = resolveFieldValue(p.data, field);
+          const formattedVal = val !== undefined && val !== null && String(val).trim() !== "" ? String(val) : "-";
+          row[field.label] = formattedVal;
+        });
+
+        // Kolom status registrasi
+        row["Status"] = statusText;
+
+        // Kolom validasi info petugas di paling belakang
+        row["Terakhir Diubah Oleh"] = lastUpdatedBy;
+        row["Waktu Update Terakhir"] = lastUpdatedAtFormatted;
+        row["Riwayat Petugas (Awal - Akhir)"] = historyFormatted;
+      }
 
       return row;
     });
@@ -160,7 +244,8 @@ export function ExportWorkspaceClient({ workspaceId }: { workspaceId: string }) 
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Laporan Registrasi");
 
-    const filename = `Laporan_${workspace?.name?.replace(/[^a-zA-Z0-9]/g, "_") || "Registrasi"}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    const modeSuffix = columnMode === "import_order" ? "Format_Import" : "Format_Form";
+    const filename = `Laporan_${workspace?.name?.replace(/[^a-zA-Z0-9]/g, "_") || "Registrasi"}_${modeSuffix}_${new Date().toISOString().slice(0, 10)}.xlsx`;
     XLSX.writeFile(workbook, filename);
 
     setIsExported(true);
@@ -185,13 +270,63 @@ export function ExportWorkspaceClient({ workspaceId }: { workspaceId: string }) 
 
       <Card className="border shadow-xs">
         <CardHeader>
-          <CardTitle className="text-base font-semibold">Pilih Kriteria Data Peserta</CardTitle>
+          <CardTitle className="text-base font-semibold">Pengaturan Export Excel</CardTitle>
           <CardDescription className="text-xs">
-            Header kolom file Excel akan otomatis mengikuti konfigurasi form workspace.
+            Sesuaikan filter status data dan susunan urutan kolom file Excel yang akan diunduh.
           </CardDescription>
         </CardHeader>
 
-        <CardContent className="space-y-5">
+        <CardContent className="space-y-6">
+          {/* Pilihan Susunan Urutan Kolom */}
+          <div className="space-y-2.5">
+            <label className="text-xs font-semibold text-foreground">Susunan Urutan Kolom:</label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div
+                onClick={() => setColumnMode("import_order")}
+                className={`p-3.5 rounded-lg border cursor-pointer transition-all flex flex-col justify-between ${
+                  columnMode === "import_order"
+                    ? "border-primary bg-primary/5 ring-1 ring-primary"
+                    : "border-border hover:bg-muted/40"
+                }`}
+              >
+                <div className="flex items-start gap-2.5">
+                  <FileSpreadsheet className={`w-4 h-4 mt-0.5 shrink-0 ${columnMode === "import_order" ? "text-primary" : "text-muted-foreground"}`} />
+                  <div>
+                    <p className="text-xs font-semibold text-foreground">Sesuai Urutan Import Asli</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                      Menampilkan semua kolom tabel Excel sesuai urutan ketika di-import, ditambah status & informasi validasi petugas di akhir.
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-2.5 pt-2 border-t border-border/50 text-[10px] text-muted-foreground">
+                  {importOriginalKeys.length} kolom import terdeteksi + validasi info
+                </div>
+              </div>
+
+              <div
+                onClick={() => setColumnMode("form_order")}
+                className={`p-3.5 rounded-lg border cursor-pointer transition-all flex flex-col justify-between ${
+                  columnMode === "form_order"
+                    ? "border-primary bg-primary/5 ring-1 ring-primary"
+                    : "border-border hover:bg-muted/40"
+                }`}
+              >
+                <div className="flex items-start gap-2.5">
+                  <LayoutList className={`w-4 h-4 mt-0.5 shrink-0 ${columnMode === "form_order" ? "text-primary" : "text-muted-foreground"}`} />
+                  <div>
+                    <p className="text-xs font-semibold text-foreground">Sesuai Urutan Atur Form Workspace</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                      Murni mengikuti urutan susunan field form yang diatur di Form Settings, ditambah status & informasi validasi petugas di akhir.
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-2.5 pt-2 border-t border-border/50 text-[10px] text-muted-foreground">
+                  {activeSortedFormFields.length} field form aktif + validasi info
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div className="space-y-2">
             <label className="text-xs font-semibold text-foreground">Filter Kelayakan Peserta:</label>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">

@@ -396,11 +396,12 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
   // Import mutation
   const importMutation = useMutation({
     mutationFn: async () => {
-      // 1. Simpan konfigurasi pemetaan kolom identitas ke Workspace
+      // 1. Simpan konfigurasi pemetaan kolom identitas & urutan kolom import ke Workspace
       await api.updateWorkspace(workspaceId, {
         uniqueKeyColumn: selectedKeyField,
         nameColumn: selectedNameField,
         photoColumn: selectedPhotoField !== "none" ? selectedPhotoField : undefined,
+        importHeaders: headers.length > 0 ? headers : undefined,
       });
 
       // 2. Import peserta

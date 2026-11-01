@@ -129,6 +129,7 @@ export const workspace = pgTable("workspace", {
   uniqueKeyColumn: text("unique_key_column"),
   nameColumn: text("name_column"),
   photoColumn: text("photo_column"),
+  importHeaders: jsonb("import_headers").$type<string[]>().default([]),
   createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at")

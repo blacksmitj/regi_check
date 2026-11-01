@@ -19,6 +19,7 @@ export interface Workspace {
   uniqueKeyColumn?: string;
   nameColumn?: string;
   photoColumn?: string;
+  importHeaders?: string[];
   createdAt: string;
   updatedAt: string;
 }
