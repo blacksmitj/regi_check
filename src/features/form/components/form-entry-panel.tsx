@@ -67,7 +67,23 @@ import {
   Loader2,
   Trash2,
   X,
+  MoreVertical,
+  Share2,
+  Download,
+  FileSpreadsheet,
+  FileCheck2,
+  Settings,
+  RotateCcw,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useRouter } from "next/navigation";
+import { useAuthStore } from "@/stores/auth-store";
 
 interface FormEntryPanelProps {
   participant: Participant;
@@ -85,6 +101,8 @@ interface FormEntryPanelProps {
   hasPrev?: boolean;
   hasNext?: boolean;
   participantIndexInfo?: string;
+  onOpenShareModal?: () => void;
+  onOpenConfirmModal?: (type: "clean_data" | "delete_workspace") => void;
 }
 
 interface FormSectionGroup {
@@ -111,7 +129,11 @@ export function FormEntryPanel({
   hasPrev,
   hasNext,
   participantIndexInfo,
+  onOpenShareModal,
+  onOpenConfirmModal,
 }: FormEntryPanelProps) {
+  const router = useRouter();
+  const { user } = useAuthStore();
   const fields = directFormFields || checklistItems || [];
 
   const [formData, setFormData] = useState<Record<string, unknown>>({});
@@ -407,6 +429,10 @@ export function FormEntryPanel({
         await deleteOfflineDraft(participant.id);
         dirtyRef.current = false;
         setDirty(false);
+      }
+      // Otomatis kembali ke daftar peserta di mobile agar petugas siap memilih/mencari peserta berikutnya
+      if (onBackToList) {
+        onBackToList();
       }
     } catch {
       setSaveError(true);
@@ -1254,16 +1280,16 @@ export function FormEntryPanel({
   return (
     <div className="flex-1 min-h-0 flex flex-col h-full bg-background overflow-hidden">
       {/* Top Header: Participant Profile Summary & Autosave */}
-      <div className="p-4 sm:p-5 border-b border-border bg-card shrink-0 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3 min-w-0">
+      <div className="p-2.5 sm:p-5 border-b border-border bg-card shrink-0 flex flex-row items-center justify-between gap-2 sm:gap-4">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
           {onBackToList && (
             <Button
               size="icon"
               variant="ghost"
               onClick={onBackToList}
-              className="md:hidden h-8 w-8 shrink-0 -ml-1 text-muted-foreground"
+              className="md:hidden h-7 w-7 sm:h-8 sm:w-8 shrink-0 -ml-1 text-muted-foreground"
             >
-              <ArrowLeft className="w-4 h-4" />
+              <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </Button>
           )}
 
@@ -1281,31 +1307,35 @@ export function FormEntryPanel({
                 <img
                   src={mainPhotoUrl}
                   alt={participantName}
-                  className="w-12 h-12 rounded-full object-cover border-2 border-primary/20 shadow-xs group-hover:opacity-85 transition-opacity"
+                  className="w-8 h-8 sm:w-12 sm:h-12 rounded-full object-cover border border-primary/20 sm:border-2 shadow-xs group-hover:opacity-85 transition-opacity"
                 />
-                <div className="absolute inset-0 bg-black/40 rounded-full opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white text-[9px]">
-                  <ExternalLink className="w-3.5 h-3.5" />
+                <div className="absolute inset-0 bg-black/40 rounded-full opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white text-[8px] sm:text-[9px]">
+                  <ExternalLink className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                 </div>
               </>
             ) : (
-              <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-base border-2 border-primary/20">
+              <div className="w-8 h-8 sm:w-12 sm:h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs sm:text-base border border-primary/20 sm:border-2">
                 {participantName.charAt(0).toUpperCase()}
               </div>
             )}
           </div>
 
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-base sm:text-lg font-bold tracking-tight text-foreground truncate">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <h2 className="text-xs sm:text-base md:text-lg font-bold tracking-tight text-foreground truncate">
                 {participantName}
               </h2>
-              <StatusBadge status={participant.status} />
+              <StatusBadge status={participant.status} className="scale-90 sm:scale-100 origin-left" />
             </div>
-            <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5 flex-wrap">
-              <span>{resolvedUniqueKeyLabel}: <span className="font-medium text-foreground">{uniqueKeyValue}</span></span>
+            <div className="text-[10px] sm:text-xs text-muted-foreground flex items-center gap-2 mt-0 sm:mt-0.5 truncate">
+              <span className="truncate">
+                {resolvedUniqueKeyLabel}: <span className="font-medium text-foreground">{uniqueKeyValue}</span>
+              </span>
             </div>
+
+            {/* Riwayat Petugas Inline: Hanya di Layar Desktop (sm ke atas) */}
             {lastOfficer ? (
-              <div className="text-[11px] text-muted-foreground flex items-center gap-1.5 mt-1 flex-wrap">
+              <div className="hidden sm:flex text-[11px] text-muted-foreground items-center gap-1.5 mt-1 flex-wrap">
                 <UserCheck className="w-3.5 h-3.5 text-primary shrink-0" />
                 <span>
                   Terakhir diubah oleh{" "}
@@ -1325,7 +1355,7 @@ export function FormEntryPanel({
                 </span>
               </div>
             ) : (
-              <div className="text-[11px] text-muted-foreground/70 flex items-center gap-1 mt-1">
+              <div className="hidden sm:flex text-[11px] text-muted-foreground/70 items-center gap-1 mt-1">
                 <Clock className="w-3 h-3 shrink-0" />
                 <span>Belum ada riwayat perubahan oleh petugas</span>
               </div>
@@ -1333,48 +1363,96 @@ export function FormEntryPanel({
           </div>
         </div>
 
-        {/* Progress & Sync Status */}
-        <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-center flex-wrap">
-          {/* Drawer Riwayat Petugas (Awal - Akhir) */}
+        {/* Action Controls & Drawer Riwayat/Info */}
+        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+          {/* Drawer Terpadu: Riwayat Petugas & Info Status Peserta */}
           <Sheet>
             <SheetTrigger
               render={
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-8 text-xs gap-1.5"
-                />
-              }
-            >
-              <History className="w-3.5 h-3.5 text-primary" />
-              <span>Riwayat Petugas</span>
-              {officerHistory.length > 0 && (
-                <Badge
-                  variant="secondary"
-                  className="text-[10px] px-1.5 py-0 h-4 ml-0.5"
+                  className="h-7 sm:h-8 px-2 sm:px-3 text-xs gap-1 sm:gap-1.5"
+                  title="Lihat Info & Riwayat Petugas"
                 >
-                  {officerHistory.length}
-                </Badge>
-              )}
-            </SheetTrigger>
+                  <History className="w-3.5 h-3.5 text-primary" />
+                  <span className="hidden sm:inline">Riwayat Petugas</span>
+                  {officerHistory.length > 0 && (
+                    <Badge
+                      variant="secondary"
+                      className="text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0 h-3.5 sm:h-4 ml-0.5"
+                    >
+                      {officerHistory.length}
+                    </Badge>
+                  )}
+                </Button>
+              }
+            />
             <SheetContent side="right" className="w-full sm:max-w-md flex flex-col p-0">
               <SheetHeader className="p-4 border-b border-border">
                 <SheetTitle className="text-sm font-bold flex items-center gap-2">
                   <History className="w-4 h-4 text-primary" />
-                  Riwayat Petugas Pemeriksa
+                  Informasi & Riwayat Peserta
                 </SheetTitle>
                 <SheetDescription className="text-xs">
-                  Urutan riwayat petugas yang melakukan perubahan pada{" "}
+                  Ringkasan status form dan urutan petugas pemeriksa untuk{" "}
                   <span className="font-semibold text-foreground">
                     {participantName}
-                  </span>{" "}
-                  dari awal hingga terakhir.
+                  </span>.
                 </SheetDescription>
               </SheetHeader>
 
-              <div className="flex-1 overflow-y-auto p-4">
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                {/* Mobile Info Ringkasan Status & Progress Form di Drawer */}
+                <div className="p-3 rounded-lg border border-border bg-muted/40 space-y-2.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">Kelengkapan Form:</span>
+                    <span className="font-semibold text-foreground">
+                      {filledRequiredCount} dari {requiredFields.length} Wajib Terisi
+                    </span>
+                  </div>
+                  <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className={`h-full transition-all duration-300 ${
+                        filledRequiredCount === requiredFields.length
+                          ? "bg-emerald-500"
+                          : "bg-primary"
+                      }`}
+                      style={{
+                        width: `${
+                          requiredFields.length > 0
+                            ? (filledRequiredCount / requiredFields.length) * 100
+                            : 100
+                        }%`,
+                      }}
+                    />
+                  </div>
+                  {lastOfficer && (
+                    <div className="pt-2 border-t border-border/50 text-[11px] text-muted-foreground space-y-1">
+                      <div className="flex items-center gap-1.5 text-foreground font-medium">
+                        <UserCheck className="w-3.5 h-3.5 text-primary shrink-0" />
+                        <span>Pemeriksa Terakhir: {lastOfficer.officerName}</span>
+                      </div>
+                      <div className="text-[10px] pl-5 text-muted-foreground">
+                        {new Date(lastOfficer.timestamp).toLocaleString("id-ID", {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          second: "2-digit",
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="text-xs font-semibold text-foreground pt-1">
+                  Riwayat Aktivitas Petugas
+                </div>
+
                 {officerHistory.length === 0 ? (
-                  <div className="py-12 text-center text-muted-foreground space-y-2">
+                  <div className="py-8 text-center text-muted-foreground space-y-2">
                     <History className="w-8 h-8 mx-auto opacity-40" />
                     <p className="text-xs font-medium">
                       Belum ada riwayat perubahan
@@ -1460,11 +1538,13 @@ export function FormEntryPanel({
               </div>
             </SheetContent>
           </Sheet>
-          <div className="text-right">
+
+          {/* Progress Wajib Terisi (Desktop Inline) */}
+          <div className="hidden sm:block text-right">
             <div className="text-xs font-semibold text-foreground">
               {filledRequiredCount} dari {requiredFields.length} Wajib Terisi
             </div>
-            <div className="w-32 h-1.5 bg-muted rounded-full overflow-hidden mt-1">
+            <div className="w-28 md:w-32 h-1.5 bg-muted rounded-full overflow-hidden mt-1">
               <div
                 className={`h-full transition-all duration-300 ${
                   filledRequiredCount === requiredFields.length
@@ -1481,7 +1561,9 @@ export function FormEntryPanel({
               />
             </div>
           </div>
-          <div className="flex flex-col items-end gap-1">
+
+          {/* Status Autosave Sync Indicator (Desktop Inline) */}
+          <div className="hidden sm:flex flex-col items-end gap-1">
             <AutosaveIndicator
               status={
                 saveError
@@ -1500,19 +1582,103 @@ export function FormEntryPanel({
               </span>
             )}
           </div>
+
+          {/* Tombol Simpan */}
           <Button
             size="sm"
             onClick={handleSave}
             disabled={(!dirty && !hasMissingRequired) || saving || draftLoading}
-            className="h-8 text-xs"
+            className="h-7 sm:h-8 px-2.5 sm:px-3 text-xs"
           >
             {saving ? "Menyimpan..." : "Simpan"}
           </Button>
+
+          {/* Mobile Action Dropdown Kebab (Workspace Actions) */}
+          {workspace && (
+            <div className="flex md:hidden items-center">
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground">
+                      <MoreVertical className="w-3.5 h-3.5" />
+                      <span className="sr-only">Menu Opsi Workspace</span>
+                    </Button>
+                  }
+                />
+                <DropdownMenuContent align="end" className="w-56 p-1.5">
+                  {onOpenShareModal && (
+                    <DropdownMenuItem
+                      onClick={onOpenShareModal}
+                      className="text-xs gap-2.5 py-2 cursor-pointer"
+                    >
+                      <Share2 className="w-4 h-4 text-primary" />
+                      <span>Bagikan Workspace</span>
+                    </DropdownMenuItem>
+                  )}
+
+                  <DropdownMenuItem
+                    onClick={() => router.push(`/workspaces/${workspace.id}/export`)}
+                    className="text-xs gap-2.5 py-2 cursor-pointer"
+                  >
+                    <Download className="w-4 h-4 text-muted-foreground" />
+                    <span>Export Data</span>
+                  </DropdownMenuItem>
+
+                  {user?.role === "admin" && (
+                    <>
+                      <DropdownMenuSeparator className="my-1" />
+                      <DropdownMenuItem
+                        onClick={() => router.push(`/workspaces/${workspace.id}/import`)}
+                        className="text-xs gap-2.5 py-2 cursor-pointer"
+                      >
+                        <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                        <span>Import Excel</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => router.push(`/workspaces/${workspace.id}/form-settings`)}
+                        className="text-xs gap-2.5 py-2 cursor-pointer"
+                      >
+                        <FileCheck2 className="w-4 h-4 text-primary" />
+                        <span>Atur Form Checklist</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => router.push(`/workspaces/${workspace.id}/settings`)}
+                        className="text-xs gap-2.5 py-2 cursor-pointer"
+                      >
+                        <Settings className="w-4 h-4 text-muted-foreground" />
+                        <span>Pengaturan Workspace</span>
+                      </DropdownMenuItem>
+
+                      {onOpenConfirmModal && (
+                        <>
+                          <DropdownMenuSeparator className="my-1" />
+                          <DropdownMenuItem
+                            onClick={() => onOpenConfirmModal("clean_data")}
+                            className="text-xs text-amber-700 dark:text-amber-400 gap-2.5 py-2 cursor-pointer"
+                          >
+                            <RotateCcw className="w-4 h-4" />
+                            <span>Bersihkan Data Form</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => onOpenConfirmModal("delete_workspace")}
+                            className="text-xs text-destructive focus:text-destructive gap-2.5 py-2 cursor-pointer"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            <span>Hapus Workspace</span>
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Main Form Fields Container */}
-      <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-5 space-y-3 pb-24 md:pb-5">
+      <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-5 space-y-3 pb-6 md:pb-5">
         {activeInputFields.length === 0 ? (
           <div className="p-8 text-center text-muted-foreground border border-dashed rounded-lg">
             <AlertCircle className="w-8 h-8 mx-auto mb-2 text-muted-foreground/60" />
@@ -1619,53 +1785,6 @@ export function FormEntryPanel({
             })}
           </div>
         )}
-      </div>
-
-      {/* Mobile Floating Sticky Bottom Navigation Bar */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-card/95 backdrop-blur-md border-t border-border px-3 py-2 flex items-center justify-between gap-2 shadow-lg">
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={onPrevParticipant}
-          disabled={!hasPrev || !onPrevParticipant}
-          className="h-9 px-2.5 text-xs gap-1 shrink-0"
-        >
-          <ChevronLeft className="w-4 h-4" />
-          <span className="hidden xs:inline">Sebelumnya</span>
-        </Button>
-
-        <div className="flex flex-col items-center justify-center min-w-0 flex-1 px-1">
-          {participantIndexInfo && (
-            <span className="text-[10px] font-semibold text-muted-foreground truncate">
-              {participantIndexInfo}
-            </span>
-          )}
-          <div className="flex items-center gap-1.5 mt-0.5">
-            <AutosaveIndicator
-              status={
-                draftLoading
-                  ? "saved"
-                  : saving
-                    ? "saving"
-                    : dirty
-                      ? "pending"
-                      : syncStatus
-              }
-              onRetry={saveError ? handleSave : undefined}
-            />
-          </div>
-        </div>
-
-        <Button
-          size="sm"
-          variant="default"
-          onClick={onNextParticipant}
-          disabled={!hasNext || !onNextParticipant}
-          className="h-9 px-2.5 text-xs gap-1 shrink-0"
-        >
-          <span className="hidden xs:inline">Berikutnya</span>
-          <ChevronRight className="w-4 h-4" />
-        </Button>
       </div>
 
       {/* Media Preview Modal (Foto & PDF) */}

@@ -220,12 +220,16 @@ export function WorkspaceDetailClient({ workspaceId }: { workspaceId: string }) 
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden">
-      {/* Workspace Operational Header */}
-      <div className="px-3 sm:px-4 py-2 border-b border-border bg-card/80 flex items-center justify-between gap-2 shrink-0">
-        <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+      {/* Workspace Operational Header - disembunyikan di mobile saat sedang membuka checklist peserta */}
+      <div
+        className={`px-2.5 sm:px-4 py-1.5 sm:py-2 border-b border-border bg-card/80 items-center justify-between gap-2 shrink-0 ${
+          mobileShowChecklist ? "hidden md:flex" : "flex"
+        }`}
+      >
+        <div className="flex items-center gap-1.5 sm:gap-3 min-w-0 flex-1">
           <Link href="/workspaces">
-            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
-              <ArrowLeft className="w-4 h-4" />
+            <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8 shrink-0">
+              <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </Button>
           </Link>
 
@@ -234,16 +238,16 @@ export function WorkspaceDetailClient({ workspaceId }: { workspaceId: string }) 
               <h1 className="text-xs sm:text-sm md:text-base font-bold tracking-tight text-foreground truncate">
                 {workspace.name}
               </h1>
-              <Badge variant={workspace.status === "active" ? "default" : "secondary"} className="text-[10px] py-0 shrink-0">
+              <Badge variant={workspace.status === "active" ? "default" : "secondary"} className="text-[9px] sm:text-[10px] py-0 h-4 sm:h-auto shrink-0">
                 {workspace.status === "active" ? "Aktif" : "Diarsipkan"}
               </Badge>
             </div>
-            <p className="text-[10px] sm:text-[11px] text-muted-foreground flex items-center gap-1.5 sm:gap-2 mt-0.5 truncate">
-              <span className="flex items-center gap-1 truncate">
+            <p className="text-[10px] sm:text-[11px] text-muted-foreground flex items-center gap-1.5 sm:gap-2 mt-0 sm:mt-0.5 truncate">
+              <span className="hidden sm:inline-flex items-center gap-1 truncate">
                 <Calendar className="w-3 h-3 shrink-0" />
                 <span className="truncate">{workspace.startDate} s/d {workspace.endDate}</span>
               </span>
-              <span>•</span>
+              <span className="hidden sm:inline">•</span>
               <span className="flex items-center gap-1 shrink-0">
                 <Users className="w-3 h-3" />
                 {participants.length} Peserta
@@ -488,6 +492,8 @@ export function WorkspaceDetailClient({ workspaceId }: { workspaceId: string }) 
               participantIndexInfo={
                 activeIndex >= 0 ? `${activeIndex + 1} dari ${participants.length} peserta` : undefined
               }
+              onOpenShareModal={() => setShareModalOpen(true)}
+              onOpenConfirmModal={(type) => setConfirmModal({ open: true, type })}
             />
           </div>
         ) : (

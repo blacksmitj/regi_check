@@ -3,22 +3,40 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/auth-store";
+import { useTheme } from "next-themes";
 import {
   LayoutDashboard,
   FolderKanban,
   Users2,
   FileCheck2,
   History,
-  UserCircle,
+  User,
   LogOut,
   ShieldAlert,
   Menu,
+  Sun,
+  Moon,
+  Laptop,
+  ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { ThemeToggle } from "@/components/shared/theme-toggle";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useState, Suspense } from "react";
 
 interface NavItem {
@@ -34,7 +52,6 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Template Form", href: "/templates", icon: FileCheck2, adminOnly: true },
   { label: "Petugas", href: "/officers", icon: Users2, adminOnly: true },
   { label: "Audit Log", href: "/audit-logs", icon: History, adminOnly: true },
-  { label: "Profil", href: "/profile", icon: UserCircle },
 ];
 
 interface AppHeaderProps {
@@ -69,6 +86,7 @@ export function AppHeader({ user }: AppHeaderProps) {
 function AppHeaderInner({ serverUser }: { serverUser?: AppHeaderProps["user"] }) {
   const router = useRouter();
   const pathname = usePathname();
+  const { theme, setTheme } = useTheme();
   const { user: clientUser, logout } = useAuthStore();
   const user = serverUser
     ? {
@@ -198,34 +216,82 @@ function AppHeaderInner({ serverUser }: { serverUser?: AppHeaderProps["user"] })
 
         {/* Right: User Profile & Actions */}
         <div className="flex items-center gap-2 sm:gap-3">
-          <ThemeToggle />
           {user ? (
-            <div className="flex items-center gap-2.5">
-              <Avatar className="w-8 h-8 border border-border">
-                {user.avatarUrl && <AvatarImage src={user.avatarUrl} alt={user.name} />}
-                <AvatarFallback>{user.name.slice(0, 2).toUpperCase()}</AvatarFallback>
-              </Avatar>
-              <div className="hidden lg:flex flex-col text-left">
-                <span className="text-xs font-semibold leading-tight">{user.name}</span>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  <Badge variant={user.role === "admin" ? "default" : "secondary"} className="text-[9px] px-1.5 py-0 uppercase tracking-wider font-semibold">
-                    {user.role}
-                  </Badge>
-                  <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">{user.email}</span>
-                </div>
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handleLogout}
-                disabled={isLoggingOut}
-                title="Keluar (Logout)"
-                aria-label="Keluar (Logout)"
-                className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    className="flex items-center gap-2.5 px-2 py-1.5 h-auto rounded-lg hover:bg-accent/60 transition-colors"
+                  />
+                }
               >
-                <LogOut className={`w-4 h-4 ${isLoggingOut ? "animate-pulse" : ""}`} />
-              </Button>
-            </div>
+                <Avatar className="w-8 h-8 border border-border">
+                  {user.avatarUrl && <AvatarImage src={user.avatarUrl} alt={user.name} />}
+                  <AvatarFallback>{user.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+                </Avatar>
+                <div className="hidden sm:flex flex-col text-left">
+                  <span className="text-xs font-semibold leading-tight">{user.name}</span>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <Badge
+                      variant={user.role === "admin" ? "default" : "secondary"}
+                      className="text-[9px] px-1.5 py-0 uppercase tracking-wider font-semibold"
+                    >
+                      {user.role}
+                    </Badge>
+                  </div>
+                </div>
+                <ChevronDown className="w-3.5 h-3.5 text-muted-foreground ml-0.5" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel className="font-normal">
+                  <div className="flex flex-col space-y-1 py-1">
+                    <p className="text-sm font-semibold leading-none">{user.name}</p>
+                    <p className="text-xs text-muted-foreground leading-none truncate">{user.email}</p>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
+                  <DropdownMenuItem onClick={() => router.push("/profile")}>
+                    <User className="w-4 h-4 mr-2" />
+                    <span>Profil</span>
+                  </DropdownMenuItem>
+
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger>
+                      <Sun className="w-4 h-4 mr-2 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+                      <Moon className="absolute w-4 h-4 mr-2 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+                      <span className="ml-6">Tema Tampilan</span>
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent className="w-36">
+                      <DropdownMenuRadioGroup value={theme} onValueChange={setTheme}>
+                        <DropdownMenuRadioItem value="light">
+                          <Sun className="w-4 h-4 mr-2 text-amber-500" />
+                          <span>Terang</span>
+                        </DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="dark">
+                          <Moon className="w-4 h-4 mr-2 text-indigo-400" />
+                          <span>Gelap</span>
+                        </DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="system">
+                          <Laptop className="w-4 h-4 mr-2 text-muted-foreground" />
+                          <span>Sistem</span>
+                        </DropdownMenuRadioItem>
+                      </DropdownMenuRadioGroup>
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  variant="destructive"
+                  onClick={handleLogout}
+                  disabled={isLoggingOut}
+                >
+                  <LogOut className={`w-4 h-4 mr-2 ${isLoggingOut ? "animate-pulse" : ""}`} />
+                  <span>{isLoggingOut ? "Keluar..." : "Keluar (Logout)"}</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           ) : (
             <Link href="/login">
               <Button size="sm" variant="outline" className="gap-2 text-xs">
