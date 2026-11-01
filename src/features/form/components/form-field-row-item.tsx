@@ -17,6 +17,7 @@ import {
   CornerDownRight,
   FolderInput,
   Check,
+  Copy,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -51,6 +52,7 @@ interface FormFieldRowItemProps {
   onMoveGroupDown?: (sectionId: string) => void;
   onMoveToSection?: (itemId: string, targetSectionId: string) => void;
   onEdit: (item: FormField) => void;
+  onDuplicate?: (item: FormField) => void;
   onDelete: (id: string) => void;
   onToggleActive?: (id: string, active: boolean) => void;
 }
@@ -73,6 +75,7 @@ export function FormFieldRowItem({
   onMoveGroupDown,
   onMoveToSection,
   onEdit,
+  onDuplicate,
   onDelete,
 }: FormFieldRowItemProps) {
   const isSection = item.type === "section";
@@ -338,6 +341,20 @@ export function FormFieldRowItem({
               </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>
+        )}
+
+        {onDuplicate && !isExcel && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => onDuplicate(item)}
+            className="h-7 px-2 text-xs gap-1 text-foreground"
+            title="Duplikat item field ini"
+          >
+            <Copy className="w-3.5 h-3.5 text-muted-foreground" />
+            <span className="hidden sm:inline">Duplikat</span>
+          </Button>
         )}
 
         <Button

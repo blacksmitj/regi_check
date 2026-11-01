@@ -539,6 +539,32 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
     setItems((prev) => prev.filter((it) => it.id !== id));
   };
 
+  // Duplicate an existing custom field right below it
+  const handleDuplicateField = (itemToDuplicate: FormField) => {
+    const originalLabel = itemToDuplicate.label || "Field";
+    const duplicateLabel = `${originalLabel} (Salinan)`;
+    const newFieldId = `field-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+
+    const duplicatedItem: FormField = {
+      ...itemToDuplicate,
+      id: newFieldId,
+      label: duplicateLabel,
+      options: itemToDuplicate.options ? [...itemToDuplicate.options] : undefined,
+    };
+
+    setItems((prev) => {
+      const index = prev.findIndex((it) => it.id === itemToDuplicate.id);
+      if (index === -1) {
+        return [...prev, duplicatedItem].map((it, idx) => ({ ...it, order: idx + 1 }));
+      }
+      const updated = [...prev];
+      updated.splice(index + 1, 0, duplicatedItem);
+      return updated.map((it, idx) => ({ ...it, order: idx + 1 }));
+    });
+
+    smoothScrollToItem(newFieldId);
+  };
+
   const totalFieldsCount = items.filter((it) => it.type !== "section").length;
   const totalSectionsCount = items.filter((it) => it.type === "section").length;
 
@@ -702,6 +728,7 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
                           onMoveGroupDown={(secId) => handleMoveSectionGroup(secId, "down")}
                           onMoveToSection={handleMoveItemToSection}
                           onEdit={handleOpenEditDrawer}
+                          onDuplicate={handleDuplicateField}
                           onDelete={handleDeleteField}
                         />
                         {/* Insertion divider di bawah setiap item (index idx + 1) */}
