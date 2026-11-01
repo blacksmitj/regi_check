@@ -33,9 +33,13 @@ export default function WorkspacesPage() {
     <div className="flex-1 p-6 max-w-7xl mx-auto w-full space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-5">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Manajemen Workspace Kegiatan</h1>
+          <h1 className="text-2xl font-bold tracking-tight">
+            {user?.role === "officer" ? "Pilih Kegiatan Registrasi" : "Manajemen Workspace Kegiatan"}
+          </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Kelola daftar kegiatan registrasi, peserta, dan checklist berkas.
+            {user?.role === "officer"
+              ? "Pilih kegiatan untuk langsung memulai pemeriksaan dan verifikasi berkas checklist peserta."
+              : "Kelola daftar kegiatan registrasi, peserta, dan checklist berkas."}
           </p>
         </div>
 
@@ -109,8 +113,8 @@ export default function WorkspacesPage() {
                     Selesai: {ws.endDate}
                   </span>
                   <Link href={`/workspaces/${ws.id}`}>
-                    <Button size="sm" variant="outline" className="gap-1.5 text-xs">
-                      <span>Buka</span>
+                    <Button size="sm" variant={user?.role === "officer" ? "default" : "outline"} className="gap-1.5 text-xs">
+                      <span>{user?.role === "officer" ? "Buka Registrasi Check" : "Buka"}</span>
                       <ArrowRight className="w-3.5 h-3.5" />
                     </Button>
                   </Link>

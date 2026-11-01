@@ -18,7 +18,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { useState } from "react";
+import { useState, Suspense } from "react";
+import { DevRoleSwitcher } from "./dev-role-switcher";
 
 interface NavItem {
   label: string;
@@ -28,15 +29,34 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Workspace", href: "/workspaces", icon: FolderKanban },
+  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, adminOnly: true },
+  { label: "Pilih Kegiatan (Workspace)", href: "/workspaces", icon: FolderKanban },
   { label: "Template Checklist", href: "/templates", icon: FileCheck2, adminOnly: true },
   { label: "Petugas", href: "/officers", icon: Users2, adminOnly: true },
-  { label: "Audit Log", href: "/audit-logs", icon: History },
+  { label: "Audit Log", href: "/audit-logs", icon: History, adminOnly: true },
   { label: "Profil", href: "/profile", icon: UserCircle },
 ];
 
 export function AppHeader() {
+  return (
+    <Suspense
+      fallback={
+        <header className="sticky top-0 z-40 w-full border-b border-border bg-background h-16 flex items-center px-4 md:px-6 justify-between">
+          <div className="flex items-center gap-2.5 font-bold tracking-tight">
+            <div className="w-8 h-8 rounded-lg bg-primary text-primary-foreground flex items-center justify-center text-sm font-black shadow-sm">
+              RC
+            </div>
+            <span className="text-base hidden sm:inline-block">RegiCheck</span>
+          </div>
+        </header>
+      }
+    >
+      <AppHeaderInner />
+    </Suspense>
+  );
+}
+
+function AppHeaderInner() {
   const router = useRouter();
   const pathname = usePathname();
   const { user, logout } = useAuthStore();
@@ -92,7 +112,7 @@ export function AppHeader() {
             </SheetContent>
           </Sheet>
 
-          <Link href="/dashboard" className="flex items-center gap-2.5 font-bold tracking-tight">
+          <Link href={user?.role === "officer" ? "/workspaces" : "/dashboard"} className="flex items-center gap-2.5 font-bold tracking-tight">
             <div className="w-8 h-8 rounded-lg bg-primary text-primary-foreground flex items-center justify-center text-sm font-black shadow-sm">
               RC
             </div>
@@ -124,6 +144,8 @@ export function AppHeader() {
 
         {/* Right: User Profile & Actions */}
         <div className="flex items-center gap-3">
+          <DevRoleSwitcher />
+
           {user ? (
             <div className="flex items-center gap-2.5">
               <Avatar className="w-8 h-8 border border-border">

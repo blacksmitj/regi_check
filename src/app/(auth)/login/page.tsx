@@ -19,7 +19,13 @@ export default function LoginPage() {
     setAuthError(null);
     try {
       await loginAs(selectedEmail);
-      router.push("/dashboard");
+      // Petugas langsung diarahkan ke pemilihan workspace untuk registrasi check
+      const currentUser = useAuthStore.getState().user;
+      if (currentUser?.role === "officer") {
+        router.push("/workspaces");
+      } else {
+        router.push("/dashboard");
+      }
     } catch (err: unknown) {
       if (err instanceof Error && err.message.includes("ACCESS_DENIED")) {
         router.push("/access-denied");

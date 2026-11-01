@@ -33,6 +33,7 @@ interface ChecklistFormPanelProps {
   initialResponses: ChecklistResponse[];
   onSaveResponse: (resp: Omit<ChecklistResponse, "id">) => Promise<void>;
   syncStatus: SyncStatus;
+  onBackToList?: () => void;
 }
 
 export function ChecklistFormPanel({
@@ -41,6 +42,7 @@ export function ChecklistFormPanel({
   initialResponses,
   onSaveResponse,
   syncStatus,
+  onBackToList,
 }: ChecklistFormPanelProps) {
   // Local state for responses map: itemId -> ChecklistResponse
   const [responses, setResponses] = useState<Record<string, ChecklistResponse>>({});
@@ -166,6 +168,20 @@ export function ChecklistFormPanel({
 
   return (
     <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
+      {/* Mobile Back Button to Participant List */}
+      {onBackToList && (
+        <div className="md:hidden pb-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onBackToList}
+            className="text-xs h-8 gap-1.5"
+          >
+            ← Kembali ke Daftar Peserta
+          </Button>
+        </div>
+      )}
+
       {/* Participant Header Info */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-4 bg-card/60 p-4 rounded-xl border">
         <div>

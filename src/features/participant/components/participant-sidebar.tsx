@@ -12,12 +12,14 @@ interface ParticipantSidebarProps {
   participants: Participant[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  className?: string;
 }
 
 export function ParticipantSidebar({
   participants,
   selectedId,
   onSelect,
+  className,
 }: ParticipantSidebarProps) {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<"all" | ParticipantStatus>("all");
@@ -49,7 +51,7 @@ export function ParticipantSidebar({
   };
 
   return (
-    <aside className="w-full md:w-80 lg:w-96 border-r border-border bg-card/40 flex flex-col h-full shrink-0">
+    <aside className={`w-full md:w-80 lg:w-96 border-r border-border bg-card/40 flex flex-col h-full shrink-0 ${className || ""}`}>
       {/* Search & Status Filters */}
       <div className="p-3.5 border-b border-border space-y-2.5">
         <div className="relative">
