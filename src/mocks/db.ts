@@ -191,6 +191,11 @@ class MockDatabase {
     return tpl;
   }
 
+  public deleteTemplate(id: string): void {
+    this.data.templates = this.data.templates.filter((t) => t.id !== id);
+    this.save();
+  }
+
   public getWorkspaceChecklist(workspaceId: string): ChecklistItem[] {
     return this.data.workspaceChecklists[workspaceId] || [];
   }

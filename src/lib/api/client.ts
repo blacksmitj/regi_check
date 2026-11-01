@@ -100,9 +100,21 @@ export const api = {
     return mockDB.getTemplates();
   },
 
+  async getTemplate(id: string): Promise<ChecklistTemplate> {
+    await delay();
+    const tpl = mockDB.getTemplate(id);
+    if (!tpl) throw new Error("Template tidak ditemukan");
+    return tpl;
+  },
+
   async saveTemplate(template: ChecklistTemplate): Promise<ChecklistTemplate> {
     await delay();
     return mockDB.saveTemplate(template);
+  },
+
+  async deleteTemplate(id: string): Promise<void> {
+    await delay();
+    mockDB.deleteTemplate(id);
   },
 
   // --- Participants ---
