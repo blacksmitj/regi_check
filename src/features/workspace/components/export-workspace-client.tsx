@@ -44,7 +44,7 @@ export function ExportWorkspaceClient({ workspaceId }: { workspaceId: string }) 
       };
 
       formFields
-        .filter((i) => i.active)
+        .filter((i) => i.active && i.type !== "section")
         .forEach((field) => {
           const key = field.excelColumn || field.id;
           const val = p.data[key] !== undefined ? p.data[key] : p.data[field.id] ?? p.data[field.label];

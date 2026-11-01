@@ -21,6 +21,7 @@ export interface Workspace {
 }
 
 export type FormFieldType =
+  | "section"
   | "checkbox"
   | "text"
   | "textarea"

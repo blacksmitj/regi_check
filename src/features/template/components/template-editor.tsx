@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
@@ -19,6 +19,7 @@ import {
   AlertTriangle,
   Loader2,
   Layers,
+  FolderPlus,
 } from "lucide-react";
 import {
   DndContext,
@@ -207,8 +208,27 @@ export function TemplateEditor({ templateId }: TemplateEditorProps) {
   };
 
   const handleAddItem = (
-    source: "custom_field" | "excel_column" | "checklist_input" = "custom_field"
+    source: "custom_field" | "excel_column" | "checklist_input" | "section" = "custom_field"
   ) => {
+    if (source === "section") {
+      const sectionCount = items.filter((it) => it.type === "section").length + 1;
+      const newSection: FormField = {
+        id: `section-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`,
+        label: `Bagian ${sectionCount}: Judul Grup Baru`,
+        description: "",
+        type: "section",
+        sourceType: "custom_field",
+        required: false,
+        editable: false,
+        evidenceEnabled: false,
+        evidenceRequired: false,
+        order: items.length + 1,
+        active: true,
+      };
+      setItems([...items, newSection]);
+      return;
+    }
+
     const newItem: FormField = {
       id: `field-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
       label: source === "excel_column" ? "Kolom Profil Peserta" : "Field Form Baru",
@@ -224,6 +244,82 @@ export function TemplateEditor({ templateId }: TemplateEditorProps) {
     };
     setItems([...items, newItem]);
   };
+
+  const handleMoveSectionGroup = (sectionId: string, direction: "up" | "down") => {
+    setItems((prev) => {
+      const blocks: FormField[][] = [];
+      let currentBlock: FormField[] = [];
+
+      for (const item of prev) {
+        if (item.type === "section") {
+          if (currentBlock.length > 0) blocks.push(currentBlock);
+          currentBlock = [item];
+        } else {
+          currentBlock.push(item);
+        }
+      }
+      if (currentBlock.length > 0) blocks.push(currentBlock);
+
+      const blockIdx = blocks.findIndex((b) => b[0]?.id === sectionId);
+      if (blockIdx === -1) return prev;
+
+      const targetIdx = direction === "up" ? blockIdx - 1 : blockIdx + 1;
+      if (targetIdx < 0 || targetIdx >= blocks.length) return prev;
+
+      const swappedBlocks = arrayMove(blocks, blockIdx, targetIdx);
+      return swappedBlocks.flat().map((it, idx) => ({ ...it, order: idx + 1 }));
+    });
+  };
+
+  const itemLayoutMeta = useMemo(() => {
+    const meta = new Map<
+      string,
+      {
+        fieldNumber: number;
+        isUnderSection: boolean;
+        canMoveGroupUp: boolean;
+        canMoveGroupDown: boolean;
+      }
+    >();
+
+    const blocks: FormField[][] = [];
+    let currentBlock: FormField[] = [];
+    for (const item of items) {
+      if (item.type === "section") {
+        if (currentBlock.length > 0) blocks.push(currentBlock);
+        currentBlock = [item];
+      } else {
+        currentBlock.push(item);
+      }
+    }
+    if (currentBlock.length > 0) blocks.push(currentBlock);
+
+    let fieldCounter = 0;
+    let seenAnySection = false;
+
+    items.forEach((item) => {
+      if (item.type === "section") {
+        seenAnySection = true;
+        const blockIdx = blocks.findIndex((b) => b[0]?.id === item.id);
+        meta.set(item.id, {
+          fieldNumber: 0,
+          isUnderSection: false,
+          canMoveGroupUp: blockIdx > 0,
+          canMoveGroupDown: blockIdx >= 0 && blockIdx < blocks.length - 1,
+        });
+      } else {
+        fieldCounter += 1;
+        meta.set(item.id, {
+          fieldNumber: fieldCounter,
+          isUnderSection: seenAnySection,
+          canMoveGroupUp: false,
+          canMoveGroupDown: false,
+        });
+      }
+    });
+
+    return meta;
+  }, [items]);
 
   const handleUpdateItem = (id: string, updates: Partial<FormField>) => {
     setItems(items.map((it) => (it.id === id ? { ...it, ...updates } : it)));
@@ -411,7 +507,16 @@ export function TemplateEditor({ templateId }: TemplateEditorProps) {
               Total {items.length} field terdaftar (kombinasi mapping Excel dan field tambahan admin).
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => handleAddItem("section")}
+              className="gap-1.5 text-xs bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20"
+            >
+              <FolderPlus className="w-3.5 h-3.5" />
+              + Section / Group
+            </Button>
             <Button
               size="sm"
               variant="outline"
@@ -435,33 +540,50 @@ export function TemplateEditor({ templateId }: TemplateEditorProps) {
         <div className="bg-primary/5 border border-primary/20 p-3 rounded-lg flex items-start gap-2.5 text-xs text-foreground">
           <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-primary" />
           <div>
-            <span className="font-semibold">Drag and Drop: </span>
-            Gunakan grip untuk mengatur urutan tampilan field di formulir data peserta.
+            <span className="font-semibold">Section &amp; Drag-and-Drop: </span>
+            Tambahkan <strong>Section / Group</strong> untuk mengelompokkan field secara berurutan, atau gunakan grip untuk mengatur posisi.
           </div>
         </div>
 
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={items.map((it) => it.id)} strategy={verticalListSortingStrategy}>
             <div className="space-y-3">
-              {items.map((item, idx) => (
-                <SortableFormFieldItem
-                  key={item.id}
-                  item={item}
-                  index={idx}
-                  availableColumns={sampleColumns}
-                  onUpdate={handleUpdateItem}
-                  onDelete={handleDeleteItem}
-                />
-              ))}
+              {items.map((item, idx) => {
+                const info = itemLayoutMeta.get(item.id);
+                return (
+                  <SortableFormFieldItem
+                    key={item.id}
+                    item={item}
+                    index={idx}
+                    fieldNumber={info?.fieldNumber}
+                    isUnderSection={info?.isUnderSection}
+                    canMoveGroupUp={info?.canMoveGroupUp}
+                    canMoveGroupDown={info?.canMoveGroupDown}
+                    onMoveGroupUp={(secId) => handleMoveSectionGroup(secId, "up")}
+                    onMoveGroupDown={(secId) => handleMoveSectionGroup(secId, "down")}
+                    availableColumns={sampleColumns}
+                    onUpdate={handleUpdateItem}
+                    onDelete={handleDeleteItem}
+                  />
+                );
+              })}
             </div>
           </SortableContext>
         </DndContext>
 
-        <div className="flex gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <Button
+            variant="outline"
+            onClick={() => handleAddItem("section")}
+            className="py-4 border-dashed border-2 border-primary/30 text-primary hover:bg-primary/5 text-xs gap-2"
+          >
+            <FolderPlus className="w-4 h-4" />
+            Tambah Section / Group
+          </Button>
           <Button
             variant="outline"
             onClick={() => handleAddItem("excel_column")}
-            className="flex-1 py-4 border-dashed border-2 text-xs gap-2"
+            className="py-4 border-dashed border-2 text-xs gap-2"
           >
             <Plus className="w-4 h-4" />
             Tambah Kolom Mapping Excel
@@ -469,7 +591,7 @@ export function TemplateEditor({ templateId }: TemplateEditorProps) {
           <Button
             variant="outline"
             onClick={() => handleAddItem("custom_field")}
-            className="flex-1 py-4 border-dashed border-2 text-xs gap-2"
+            className="py-4 border-dashed border-2 text-xs gap-2"
           >
             <Plus className="w-4 h-4" />
             Tambah Field Form Baru

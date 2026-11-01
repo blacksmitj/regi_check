@@ -124,7 +124,7 @@ export function WorkspaceDetailClient({ workspaceId }: { workspaceId: string }) 
   }
 
   return (
-    <div className="flex-1 flex flex-col h-[calc(100vh-4rem)] overflow-hidden">
+    <div className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden">
       {/* Workspace Operational Header */}
       <div className="px-4 py-2.5 border-b border-border bg-card/80 flex flex-wrap items-center justify-between gap-3 shrink-0">
         <div className="flex items-center gap-3">
@@ -239,7 +239,7 @@ export function WorkspaceDetailClient({ workspaceId }: { workspaceId: string }) 
       />
 
       {/* Main Split Layout: Left Sidebar Peserta + Right Panel Checklist */}
-      <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+      <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden">
         <ParticipantSidebar
           participants={participants}
           selectedId={selectedParticipantId}
@@ -251,7 +251,7 @@ export function WorkspaceDetailClient({ workspaceId }: { workspaceId: string }) 
         />
 
         {activeParticipant ? (
-          <div className={`flex-1 flex flex-col overflow-hidden ${!mobileShowChecklist ? "hidden md:flex" : "flex"}`}>
+          <div className={`flex-1 min-h-0 flex flex-col overflow-hidden ${!mobileShowChecklist ? "hidden md:flex" : "flex"}`}>
             <FormEntryPanel
               participant={activeParticipant}
               formFields={checklistItems}

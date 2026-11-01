@@ -14,7 +14,7 @@ import {
   CheckCircle2,
   FileCheck2,
   Plus,
-  HelpCircle,
+  FolderPlus,
 } from "lucide-react";
 import {
   DndContext,
@@ -210,6 +210,176 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
     setDrawerOpen(true);
   };
 
+  // Create brand new section header
+  const handleCreateSection = () => {
+    const sectionCount = items.filter((it) => it.type === "section").length + 1;
+    const newSection: FormField = {
+      id: `section-${Date.now().toString(36)}`,
+      label: `Bagian ${sectionCount}: Judul Grup Baru`,
+      description: "",
+      type: "section",
+      sourceType: "custom_field",
+      required: false,
+      editable: false,
+      evidenceEnabled: false,
+      evidenceRequired: false,
+      order: items.length + 1,
+      active: true,
+    };
+    setItems((prev) => [...prev, newSection]);
+    setEditingField(newSection);
+    setDrawerOpen(true);
+  };
+
+  // Move an entire section group (the section header + all fields below it until the next section)
+  const handleMoveSectionGroup = (sectionId: string, direction: "up" | "down") => {
+    setItems((prev) => {
+      // Split flat list into blocks: { isSectionBlock, items: FormField[] }
+      const blocks: FormField[][] = [];
+      let currentBlock: FormField[] = [];
+
+      for (const item of prev) {
+        if (item.type === "section") {
+          if (currentBlock.length > 0) {
+            blocks.push(currentBlock);
+          }
+          currentBlock = [item];
+        } else {
+          currentBlock.push(item);
+        }
+      }
+      if (currentBlock.length > 0) {
+        blocks.push(currentBlock);
+      }
+
+      const blockIdx = blocks.findIndex((b) => b[0]?.id === sectionId);
+      if (blockIdx === -1) return prev;
+
+      const targetIdx = direction === "up" ? blockIdx - 1 : blockIdx + 1;
+      if (targetIdx < 0 || targetIdx >= blocks.length) return prev;
+
+      const swappedBlocks = arrayMove(blocks, blockIdx, targetIdx);
+      return swappedBlocks.flat().map((it, idx) => ({ ...it, order: idx + 1 }));
+    });
+  };
+
+  // Move an individual item to a specific section group (or "none" for top of form)
+  const handleMoveItemToSection = (itemId: string, targetSectionId: string) => {
+    setItems((prev) => {
+      const itemToMove = prev.find((it) => it.id === itemId);
+      if (!itemToMove) return prev;
+
+      // Filter out the item first
+      const remaining = prev.filter((it) => it.id !== itemId);
+
+      if (targetSectionId === "none") {
+        // Move to the very top (before any section)
+        const firstSectionIdx = remaining.findIndex((it) => it.type === "section");
+        if (firstSectionIdx === -1) {
+          // No section exists, append or place at end
+          return [...remaining, itemToMove].map((it, idx) => ({ ...it, order: idx + 1 }));
+        }
+        // Insert right before first section
+        const updated = [
+          ...remaining.slice(0, firstSectionIdx),
+          itemToMove,
+          ...remaining.slice(firstSectionIdx),
+        ];
+        return updated.map((it, idx) => ({ ...it, order: idx + 1 }));
+      }
+
+      // Move into target section (at the end of that section's children)
+      const targetSecIdx = remaining.findIndex((it) => it.id === targetSectionId);
+      if (targetSecIdx === -1) return prev;
+
+      // Find where this section ends (either the next section index or end of array)
+      let nextSecIdx = remaining.findIndex(
+        (it, idx) => idx > targetSecIdx && it.type === "section"
+      );
+      if (nextSecIdx === -1) {
+        nextSecIdx = remaining.length;
+      }
+
+      const updated = [
+        ...remaining.slice(0, nextSecIdx),
+        itemToMove,
+        ...remaining.slice(nextSecIdx),
+      ];
+      return updated.map((it, idx) => ({ ...it, order: idx + 1 }));
+    });
+  };
+
+  // Compute section metadata for each item (indent state, field numbering, group move availability)
+  const itemLayoutMeta = useMemo(() => {
+    const meta = new Map<
+      string,
+      {
+        fieldNumber: number;
+        isUnderSection: boolean;
+        sectionChildrenCount: number;
+        canMoveGroupUp: boolean;
+        canMoveGroupDown: boolean;
+        currentSectionId: string;
+      }
+    >();
+
+    // First build blocks to know group boundaries
+    const blocks: FormField[][] = [];
+    let currentBlock: FormField[] = [];
+    for (const item of items) {
+      if (item.type === "section") {
+        if (currentBlock.length > 0) blocks.push(currentBlock);
+        currentBlock = [item];
+      } else {
+        currentBlock.push(item);
+      }
+    }
+    if (currentBlock.length > 0) blocks.push(currentBlock);
+
+    let fieldCounter = 0;
+    let seenAnySection = false;
+    let currentSecId = "none";
+
+    items.forEach((item) => {
+      if (item.type === "section") {
+        seenAnySection = true;
+        currentSecId = item.id;
+        const blockIdx = blocks.findIndex((b) => b[0]?.id === item.id);
+        const childrenCount = blockIdx >= 0 ? blocks[blockIdx].length - 1 : 0;
+        meta.set(item.id, {
+          fieldNumber: 0,
+          isUnderSection: false,
+          sectionChildrenCount: childrenCount,
+          canMoveGroupUp: blockIdx > 0,
+          canMoveGroupDown: blockIdx >= 0 && blockIdx < blocks.length - 1,
+          currentSectionId: item.id,
+        });
+      } else {
+        fieldCounter += 1;
+        meta.set(item.id, {
+          fieldNumber: fieldCounter,
+          isUnderSection: seenAnySection,
+          sectionChildrenCount: 0,
+          canMoveGroupUp: false,
+          canMoveGroupDown: false,
+          currentSectionId: currentSecId,
+        });
+      }
+    });
+
+    return meta;
+  }, [items]);
+
+  // List of available sections for dropdown
+  const availableSections = useMemo(() => {
+    return items
+      .filter((it) => it.type === "section")
+      .map((it) => ({
+        id: it.id,
+        label: it.label || "Section Tanpa Judul",
+      }));
+  }, [items]);
+
   // Open drawer editor for a field
   const handleOpenEditDrawer = (item: FormField) => {
     setEditingField(item);
@@ -227,6 +397,9 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
   const handleDeleteField = (id: string) => {
     setItems((prev) => prev.filter((it) => it.id !== id));
   };
+
+  const totalFieldsCount = items.filter((it) => it.type !== "section").length;
+  const totalSectionsCount = items.filter((it) => it.type === "section").length;
 
   return (
     <div className="flex-1 p-6 max-w-7xl mx-auto w-full space-y-5">
@@ -279,25 +452,33 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
             onAddColumn={handleAddColumn}
             onAddAllColumns={handleAddAllColumns}
             onCreateCustomField={handleCreateCustomField}
+            onCreateSection={handleCreateSection}
           />
         </div>
 
         {/* Kanan: Urutan & Pengaturan Form (8 kolom grid) */}
         <div className="lg:col-span-8 space-y-4">
           <Card className="border shadow-xs bg-card">
-            <CardHeader className="p-4 pb-3 border-b border-border/70 flex flex-row items-center justify-between">
+            <CardHeader className="p-4 pb-3 border-b border-border/70 flex flex-row items-center justify-between gap-2">
               <div>
                 <CardTitle className="text-sm font-semibold flex items-center gap-2">
                   <FileCheck2 className="w-4 h-4 text-primary" />
-                  Urutan &amp; Susunan Form Petugas
+                  Urutan &amp; Pengelompokan (Section) Form Petugas
                 </CardTitle>
                 <CardDescription className="text-xs">
-                  Geser item dengan grip titik enam untuk menentukan urutan input form di meja registrasi.
+                  Tambahkan <strong>Section / Group</strong> untuk mengelompokkan field secara berurutan, atau geser dengan grip titik enam.
                 </CardDescription>
               </div>
-              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
-                {items.length} Field
-              </span>
+              <div className="flex items-center gap-1.5 shrink-0">
+                {totalSectionsCount > 0 && (
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                    {totalSectionsCount} Grup
+                  </span>
+                )}
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                  {totalFieldsCount} Field
+                </span>
+              </div>
             </CardHeader>
 
             <CardContent className="p-4 space-y-3">
@@ -305,19 +486,31 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
                 <div className="text-center py-16 px-4 border border-dashed rounded-lg text-xs text-muted-foreground space-y-3 bg-muted/20">
                   <p className="font-medium text-foreground">Belum ada field di form ini</p>
                   <p className="max-w-md mx-auto">
-                    Pilih kolom dari panel sebelah kiri atau klik tombol &quot;Field Baru&quot; untuk menyusun pertanyaan form peserta.
+                    Pilih kolom dari panel sebelah kiri, buat Section Grup, atau klik tombol &quot;Field Baru&quot; untuk menyusun pertanyaan form peserta.
                   </p>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleAddAllColumns}
-                    disabled={availableColumnsList.length === 0}
-                    className="text-xs gap-1.5"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    Gunakan Semua Kolom Excel
-                  </Button>
+                  <div className="flex items-center justify-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleAddAllColumns}
+                      disabled={availableColumnsList.length === 0}
+                      className="text-xs gap-1.5"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Gunakan Semua Kolom Excel
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={handleCreateSection}
+                      className="text-xs gap-1.5"
+                    >
+                      <FolderPlus className="w-3.5 h-3.5" />
+                      Buat Section Grup
+                    </Button>
+                  </div>
                 </div>
               ) : (
                 <DndContext
@@ -330,29 +523,52 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
                     strategy={verticalListSortingStrategy}
                   >
                     <div className="space-y-2.5">
-                      {items.map((item, idx) => (
-                        <FormFieldRowItem
-                          key={item.id}
-                          item={item}
-                          index={idx}
-                          onEdit={handleOpenEditDrawer}
-                          onDelete={handleDeleteField}
-                        />
-                      ))}
+                      {items.map((item, idx) => {
+                        const info = itemLayoutMeta.get(item.id);
+                        return (
+                          <FormFieldRowItem
+                            key={item.id}
+                            item={item}
+                            index={idx}
+                            fieldNumber={info?.fieldNumber}
+                            isUnderSection={info?.isUnderSection}
+                            sectionChildrenCount={info?.sectionChildrenCount}
+                            canMoveGroupUp={info?.canMoveGroupUp}
+                            canMoveGroupDown={info?.canMoveGroupDown}
+                            availableSections={availableSections}
+                            currentSectionId={info?.currentSectionId}
+                            onMoveGroupUp={(secId) => handleMoveSectionGroup(secId, "up")}
+                            onMoveGroupDown={(secId) => handleMoveSectionGroup(secId, "down")}
+                            onMoveToSection={handleMoveItemToSection}
+                            onEdit={handleOpenEditDrawer}
+                            onDelete={handleDeleteField}
+                          />
+                        );
+                      })}
                     </div>
                   </SortableContext>
                 </DndContext>
               )}
 
-              {/* Add Custom Field button */}
-              <Button
-                variant="outline"
-                onClick={handleCreateCustomField}
-                className="w-full py-4 border-dashed border-2 text-xs gap-2 mt-2"
-              >
-                <Plus className="w-4 h-4" />
-                Tambah Field Form Baru
-              </Button>
+              {/* Bottom Action Buttons: Add Section or Add Custom Field */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2">
+                <Button
+                  variant="outline"
+                  onClick={handleCreateSection}
+                  className="py-4 border-dashed border-2 border-primary/30 text-primary hover:bg-primary/5 text-xs gap-2"
+                >
+                  <FolderPlus className="w-4 h-4" />
+                  Tambah Section / Group Baru
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleCreateCustomField}
+                  className="py-4 border-dashed border-2 text-xs gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  Tambah Field Form Baru
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>

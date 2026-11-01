@@ -20,7 +20,7 @@ import {
   SEED_AUDIT_LOGS,
 } from "./seed";
 
-const DB_KEY = "regicheck_mock_db_v2";
+const DB_KEY = "regicheck_mock_db_v3";
 
 interface MockDBData {
   users: User[];

@@ -16,7 +16,7 @@ export function calculateParticipantStatus(
   formFields: FormField[],
   dataOrResponses: Record<string, unknown> | ChecklistResponse[]
 ): ParticipantStatus {
-  const activeFields = formFields.filter((f) => f.active);
+  const activeFields = formFields.filter((f) => f.active && f.type !== "section");
 
   // If array of legacy ChecklistResponse
   if (Array.isArray(dataOrResponses)) {

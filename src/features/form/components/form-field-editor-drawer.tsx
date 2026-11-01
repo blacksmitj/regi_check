@@ -105,50 +105,60 @@ function DrawerInner({
   };
 
   const isExcelMapped = formData.sourceType === "excel_column";
+  const isSection = formData.type === "section";
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full sm:max-w-md flex flex-col p-0 bg-background">
         <SheetHeader className="p-5 pb-3 border-b border-border">
           <div className="flex items-center gap-2">
-            <SheetTitle className="text-base font-semibold">Pengaturan Field Form</SheetTitle>
-            <Badge variant={isExcelMapped ? "secondary" : "default"} className="text-[10px] px-1.5 py-0">
-              {isExcelMapped ? "Kolom Excel" : "Field Admin"}
+            <SheetTitle className="text-base font-semibold">
+              {isSection ? "Pengaturan Section / Group" : "Pengaturan Field Form"}
+            </SheetTitle>
+            <Badge
+              variant={isSection ? "outline" : isExcelMapped ? "secondary" : "default"}
+              className="text-[10px] px-1.5 py-0"
+            >
+              {isSection ? "Section Header" : isExcelMapped ? "Kolom Excel" : "Field Admin"}
             </Badge>
           </div>
           <SheetDescription className="text-xs">
-            Atur label, tipe input, validasi, dan perilaku petugas saat mengisi form peserta.
+            {isSection
+              ? "Atur nama grup/section dan deskripsi pengantar untuk mengelompokkan field di bawahnya."
+              : "Atur label, tipe input, validasi, dan perilaku petugas saat mengisi form peserta."}
           </SheetDescription>
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
-          {/* Sumber Field */}
-          <div className="space-y-1.5">
-            <Label className="text-xs font-semibold">Sumber Field</Label>
-            <Select
-              value={formData.sourceType === "excel_column" ? "excel_column" : "custom_field"}
-              onValueChange={(val) => {
-                if (!val) return;
-                const source = val as "custom_field" | "excel_column";
-                setFormData((prev) => ({
-                  ...prev,
-                  sourceType: source,
-                  excelColumn: source === "excel_column" ? prev.excelColumn || availableColumns[0] || "" : undefined,
-                }));
-              }}
-            >
-              <SelectTrigger className="w-full h-8 text-xs font-medium">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="custom_field">Field Tambahan Admin (Baru)</SelectItem>
-                <SelectItem value="excel_column">Kolom Bawaan Excel Peserta</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          {/* Sumber Field (Hanya untuk field biasa) */}
+          {!isSection && (
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Sumber Field</Label>
+              <Select
+                value={formData.sourceType === "excel_column" ? "excel_column" : "custom_field"}
+                onValueChange={(val) => {
+                  if (!val) return;
+                  const source = val as "custom_field" | "excel_column";
+                  setFormData((prev) => ({
+                    ...prev,
+                    sourceType: source,
+                    excelColumn: source === "excel_column" ? prev.excelColumn || availableColumns[0] || "" : undefined,
+                  }));
+                }}
+              >
+                <SelectTrigger className="w-full h-8 text-xs font-medium">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="custom_field">Field Tambahan Admin (Baru)</SelectItem>
+                  <SelectItem value="excel_column">Kolom Bawaan Excel Peserta</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {/* Kolom Excel Mapping */}
-          {formData.sourceType === "excel_column" && (
+          {!isSection && formData.sourceType === "excel_column" && (
             <div className="space-y-1.5 p-3 rounded-md bg-muted/40 border border-border">
               <Label className="text-xs font-semibold">Petakan ke Kolom Excel</Label>
               <Select
@@ -185,24 +195,36 @@ function DrawerInner({
             </div>
           )}
 
-          {/* Label Field */}
+          {/* Label Field / Judul Section */}
           <div className="space-y-1.5">
-            <Label className="text-xs font-semibold">Label Field di Form</Label>
+            <Label className="text-xs font-semibold">
+              {isSection ? "Judul Section / Group" : "Label Field di Form"}
+            </Label>
             <Input
               value={formData.label}
               onChange={(e) => setFormData((prev) => ({ ...prev, label: e.target.value }))}
-              placeholder="Contoh: Nama Lengkap / Konfirmasi Hadir"
+              placeholder={
+                isSection
+                  ? "Contoh: Data Identitas Diri / Berkas Administrasi"
+                  : "Contoh: Nama Lengkap / Konfirmasi Hadir"
+              }
               className="text-xs h-8"
             />
           </div>
 
           {/* Deskripsi / Petunjuk Pengisian */}
           <div className="space-y-1.5">
-            <Label className="text-xs font-semibold">Petunjuk Pengisian (Opsional)</Label>
+            <Label className="text-xs font-semibold">
+              {isSection ? "Deskripsi / Subjudul Section (Opsional)" : "Petunjuk Pengisian (Opsional)"}
+            </Label>
             <Textarea
               value={formData.description || ""}
               onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
-              placeholder="Contoh: Pastikan nomor HP aktif WhatsApp..."
+              placeholder={
+                isSection
+                  ? "Contoh: Pastikan data di bagian ini sesuai dengan dokumen fisik asli peserta..."
+                  : "Contoh: Pastikan nomor HP aktif WhatsApp..."
+              }
               rows={2}
               className="text-xs"
             />
@@ -210,12 +232,13 @@ function DrawerInner({
 
           {/* Tipe Input */}
           <div className="space-y-1.5">
-            <Label className="text-xs font-semibold">Tipe Input</Label>
+            <Label className="text-xs font-semibold">Tipe Elemen Form</Label>
             <Select value={formData.type} onValueChange={(val) => handleTypeChange(val as FormFieldType)}>
               <SelectTrigger className="w-full h-8 text-xs font-medium">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="section">Section Header / Judul Grup Pembatas</SelectItem>
                 <SelectItem value="checkbox">Checkbox (Centang / Ya-Tidak)</SelectItem>
                 <SelectItem value="text">Teks Pendek (Text)</SelectItem>
                 <SelectItem value="textarea">Teks Panjang (Textarea)</SelectItem>
@@ -232,7 +255,7 @@ function DrawerInner({
           </div>
 
           {/* Options jika tipe select atau radio */}
-          {(formData.type === "select" || formData.type === "radio") && (
+          {!isSection && (formData.type === "select" || formData.type === "radio") && (
             <div className="space-y-1.5 p-3 rounded-md bg-muted/40 border border-border">
               <Label className="text-xs font-semibold">Daftar Pilihan Opsi (Satu baris per opsi)</Label>
               <Textarea
@@ -245,47 +268,49 @@ function DrawerInner({
             </div>
           )}
 
-          {/* Switch Opsi Form */}
-          <div className="space-y-3 pt-2 border-t border-border">
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label className="text-xs font-medium">Wajib Diisi (Required)</Label>
-                <p className="text-[11px] text-muted-foreground">Form tidak lengkap bila field ini kosong</p>
+          {/* Switch Opsi Form (hanya untuk field biasa) */}
+          {!isSection && (
+            <div className="space-y-3 pt-2 border-t border-border">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-xs font-medium">Wajib Diisi (Required)</Label>
+                  <p className="text-[11px] text-muted-foreground">Form tidak lengkap bila field ini kosong</p>
+                </div>
+                <Switch
+                  checked={formData.required}
+                  onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, required: checked }))}
+                />
               </div>
-              <Switch
-                checked={formData.required}
-                onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, required: checked }))}
-              />
-            </div>
 
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label className="text-xs font-medium">Dapat Diedit Petugas (Editable)</Label>
-                <p className="text-[11px] text-muted-foreground">Petugas dapat mengubah nilai saat registrasi</p>
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-xs font-medium">Dapat Diedit Petugas (Editable)</Label>
+                  <p className="text-[11px] text-muted-foreground">Petugas dapat mengubah nilai saat registrasi</p>
+                </div>
+                <Switch
+                  checked={formData.editable}
+                  onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, editable: checked }))}
+                />
               </div>
-              <Switch
-                checked={formData.editable}
-                onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, editable: checked }))}
-              />
-            </div>
 
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label className="text-xs font-medium">Wajibkan Foto Bukti (Evidence)</Label>
-                <p className="text-[11px] text-muted-foreground">Petugas wajib mengambil foto bukti saat verifikasi</p>
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-xs font-medium">Wajibkan Foto Bukti (Evidence)</Label>
+                  <p className="text-[11px] text-muted-foreground">Petugas wajib mengambil foto bukti saat verifikasi</p>
+                </div>
+                <Switch
+                  checked={!!formData.evidenceEnabled}
+                  onCheckedChange={(checked) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      evidenceEnabled: checked,
+                      evidenceRequired: checked ? prev.evidenceRequired : false,
+                    }))
+                  }
+                />
               </div>
-              <Switch
-                checked={!!formData.evidenceEnabled}
-                onCheckedChange={(checked) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    evidenceEnabled: checked,
-                    evidenceRequired: checked ? prev.evidenceRequired : false,
-                  }))
-                }
-              />
             </div>
-          </div>
+          )}
         </div>
 
         <SheetFooter className="p-4 border-t border-border flex flex-row items-center justify-between gap-2">

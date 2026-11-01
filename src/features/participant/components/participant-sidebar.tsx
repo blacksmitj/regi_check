@@ -55,9 +55,9 @@ export function ParticipantSidebar({
   };
 
   return (
-    <aside className={`w-full md:w-80 lg:w-96 border-r border-border bg-card/40 flex flex-col h-full shrink-0 ${className || ""}`}>
-      {/* Search & Status Filters */}
-      <div className="p-3.5 border-b border-border space-y-2.5">
+    <aside className={`w-full md:w-80 lg:w-96 border-r border-border bg-card/40 flex flex-col h-full min-h-0 overflow-hidden shrink-0 ${className || ""}`}>
+      {/* Search & Status Filters - Sticky Top */}
+      <div className="bg-card/95 backdrop-blur-sm p-3.5 border-b border-border space-y-2.5 shrink-0 shadow-xs">
         <div className="relative">
           <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -137,7 +137,7 @@ export function ParticipantSidebar({
       </div>
 
       {/* Participant List Scroll Area */}
-      <div className="flex-1 overflow-y-auto divide-y divide-border/60">
+      <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-border/60">
         {filtered.length === 0 ? (
           <div className="p-6 text-center text-xs text-muted-foreground">
             Tidak ada peserta yang cocok.

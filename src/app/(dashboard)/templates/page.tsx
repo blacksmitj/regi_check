@@ -164,10 +164,17 @@ export default function TemplatesPage() {
             >
               <CardHeader className="p-5 pb-3">
                 <div className="flex items-center justify-between gap-2 mb-2">
-                  <Badge variant="secondary" className="text-[10px] font-semibold gap-1">
-                    <FileCheck2 className="w-3 h-3 text-primary" />
-                    {tpl.items.length} Item Dokumen
-                  </Badge>
+                  <div className="flex items-center gap-1.5">
+                    <Badge variant="secondary" className="text-[10px] font-semibold gap-1">
+                      <FileCheck2 className="w-3 h-3 text-primary" />
+                      {tpl.items.filter((i) => i.type !== "section").length} Field Form
+                    </Badge>
+                    {tpl.items.some((i) => i.type === "section") && (
+                      <Badge variant="outline" className="text-[10px] font-semibold text-primary border-primary/30 bg-primary/5">
+                        {tpl.items.filter((i) => i.type === "section").length} Grup
+                      </Badge>
+                    )}
+                  </div>
                   <span className="text-[11px] text-muted-foreground flex items-center gap-1">
                     <Calendar className="w-3 h-3" />
                     Diperbarui: {new Date(tpl.updatedAt).toLocaleDateString("id-ID")}
@@ -181,17 +188,26 @@ export default function TemplatesPage() {
 
               <CardContent className="p-5 pt-0 space-y-4">
                 <div className="border-t border-border pt-3 space-y-2">
-                  <p className="text-[11px] font-semibold text-muted-foreground">Item Termasuk:</p>
+                  <p className="text-[11px] font-semibold text-muted-foreground">Susunan Form:</p>
                   <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
-                    {tpl.items.map((it) => (
-                      <span
-                        key={it.id}
-                        className="px-2 py-0.5 rounded bg-muted text-[10px] text-foreground font-medium border border-border/50"
-                      >
-                        {it.label}
-                        {it.required && <span className="text-destructive ml-0.5">*</span>}
-                      </span>
-                    ))}
+                    {tpl.items.map((it) =>
+                      it.type === "section" ? (
+                        <span
+                          key={it.id}
+                          className="px-2 py-0.5 rounded bg-primary/10 text-[10px] text-primary font-bold border border-primary/25 uppercase tracking-wide"
+                        >
+                          [{it.label}]
+                        </span>
+                      ) : (
+                        <span
+                          key={it.id}
+                          className="px-2 py-0.5 rounded bg-muted text-[10px] text-foreground font-medium border border-border/50"
+                        >
+                          {it.label}
+                          {it.required && <span className="text-destructive ml-0.5">*</span>}
+                        </span>
+                      )
+                    )}
                   </div>
                 </div>
 
