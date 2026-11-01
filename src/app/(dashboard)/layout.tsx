@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
-import { headers } from "next/headers";
+import { headers, cookies } from "next/headers";
 import { getCurrentUser, isUserRegistered } from "@/lib/auth";
 import { AppHeader } from "@/components/layout/app-header";
+import { AuthSync } from "@/components/shared/auth-sync";
 
 export const instant = false;
 
@@ -19,8 +20,12 @@ export default async function DashboardLayout({
     headersList.get("x-invoke-path") ||
     "";
 
-  // 1. Jika belum login sama sekali -> lempar ke login beserta redirect target
+  // 1. Jika belum login sama sekali -> bersihkan sisa cookie invalid lalu lempar ke login
   if (!user) {
+    const cookieStore = await cookies();
+    cookieStore.delete("better-auth.session_token");
+    cookieStore.delete("__Secure-better-auth.session_token");
+
     if (currentPath && currentPath.startsWith("/workspaces/")) {
       redirect(`/login?callbackUrl=${encodeURIComponent(currentPath)}`);
     }
@@ -36,9 +41,18 @@ export default async function DashboardLayout({
     redirect("/pending-approval");
   }
 
+  const clientUser = {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    avatarUrl: user.image || undefined,
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      <AppHeader />
+      <AuthSync user={clientUser} />
+      <AppHeader user={user} />
       <main className="flex-1 flex flex-col">{children}</main>
     </div>
   );

@@ -36,7 +36,17 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Profil", href: "/profile", icon: UserCircle },
 ];
 
-export function AppHeader() {
+interface AppHeaderProps {
+  user?: {
+    id: string;
+    name: string;
+    email: string;
+    role?: "admin" | "officer" | string;
+    image?: string | null;
+  } | null;
+}
+
+export function AppHeader({ user }: AppHeaderProps) {
   return (
     <Suspense
       fallback={
@@ -50,15 +60,24 @@ export function AppHeader() {
         </header>
       }
     >
-      <AppHeaderInner />
+      <AppHeaderInner serverUser={user} />
     </Suspense>
   );
 }
 
-function AppHeaderInner() {
+function AppHeaderInner({ serverUser }: { serverUser?: AppHeaderProps["user"] }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, logout } = useAuthStore();
+  const { user: clientUser, logout } = useAuthStore();
+  const user = serverUser
+    ? {
+        id: serverUser.id,
+        name: serverUser.name,
+        email: serverUser.email,
+        role: (serverUser.role as "admin" | "officer") || "officer",
+        avatarUrl: serverUser.image || undefined,
+      }
+    : clientUser;
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 

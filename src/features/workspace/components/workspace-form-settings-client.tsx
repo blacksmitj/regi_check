@@ -20,6 +20,7 @@ import {
   BookmarkCheck,
   ChevronDown,
   Loader2,
+  FolderTree,
 } from "lucide-react";
 import {
   Dialog,
@@ -43,6 +44,8 @@ import { ColumnSourceList } from "@/features/form/components/column-source-list"
 import { FormFieldRowItem } from "@/features/form/components/form-field-row-item";
 import { FormFieldEditorDrawer } from "@/features/form/components/form-field-editor-drawer";
 import { SectionDialog } from "@/features/form/components/section-dialog";
+import { ApplyTemplateDialog } from "@/features/form/components/apply-template-dialog";
+import { FormTemplate } from "@/types/domain";
 import { detectFieldType } from "@/lib/domain/drive-detector";
 
 export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: string }) {
@@ -68,6 +71,12 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
     queryFn: () => api.getWorkspaceForm(workspaceId),
   });
 
+  // All Templates list for "Pilih Template" feature
+  const { data: allTemplates = [], isLoading: isLoadingTemplates } = useQuery({
+    queryKey: ["templates"],
+    queryFn: () => api.getTemplates(),
+  });
+
   // Participants data to detect Excel columns and sample values
   const { data: participants = [] } = useQuery({
     queryKey: ["participants", workspaceId],
@@ -89,6 +98,9 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
   const [templateName, setTemplateName] = useState("");
   const [templateDesc, setTemplateDesc] = useState("");
   const [templateSavedNotice, setTemplateSavedNotice] = useState<string | null>(null);
+
+  // Apply Template Modal State
+  const [applyTemplateDialogOpen, setApplyTemplateDialogOpen] = useState(false);
 
   useEffect(() => {
     if (initialItems.length > 0) {
@@ -212,6 +224,43 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
     setTemplateName(workspace?.name ? `Template ${workspace.name}` : "Template Form Baru");
     setTemplateDesc(workspace?.description ? `Dibuat dari workspace: ${workspace.name}` : "");
     setSaveTemplateDialogOpen(true);
+  };
+
+  // Handler to apply template
+  const handleApplyTemplate = async (template: FormTemplate, mode: "replace" | "append") => {
+    // Generate fresh IDs for items to avoid clashes
+    const newItemsFromTemplate: FormField[] = (template.items || []).map((it) => ({
+      ...it,
+      id: `field-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+    }));
+
+    if (mode === "replace") {
+      const finalItems = newItemsFromTemplate.map((it, idx) => ({ ...it, order: idx + 1 }));
+      setItems(finalItems);
+    } else {
+      setItems((prev) => {
+        const combined = [...prev, ...newItemsFromTemplate];
+        return combined.map((it, idx) => ({ ...it, order: idx + 1 }));
+      });
+    }
+
+    // Hubungkan workspace ini dengan template yang dipilih
+    if (workspaceId && template.id) {
+      try {
+        await api.updateWorkspace(workspaceId, { templateId: template.id });
+        queryClient.invalidateQueries({ queryKey: ["workspace", workspaceId] });
+        queryClient.invalidateQueries({ queryKey: ["template", template.id] });
+      } catch (err) {
+        console.error("Gagal mengaitkan template ke workspace:", err);
+      }
+    }
+
+    setTemplateSavedNotice(
+      mode === "replace"
+        ? `Template "${template.name}" Diterapkan (Ganti Form)`
+        : `Template "${template.name}" Ditambahkan ke Form`
+    );
+    setTimeout(() => setTemplateSavedNotice(null), 4000);
   };
 
   // Helper to smoothly scroll moved item into view if near/outside viewport
@@ -685,6 +734,18 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
               </span>
             )}
 
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setApplyTemplateDialogOpen(true)}
+              className="gap-1.5 text-xs shadow-xs"
+              title="Pilih dan gunakan struktur dari template yang sudah ada"
+            >
+              <FolderTree className="w-3.5 h-3.5 text-primary" />
+              Pilih Template
+            </Button>
+
             {associatedTemplate ? (
               <div className="flex items-center rounded-md border shadow-xs bg-background">
                 <Button
@@ -954,6 +1015,18 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setApplyTemplateDialogOpen(true)}
+              className="gap-1.5 text-xs shadow-xs"
+              title="Pilih dan gunakan struktur dari template yang sudah ada"
+            >
+              <FolderTree className="w-3.5 h-3.5 text-primary" />
+              Pilih Template
+            </Button>
+
             {associatedTemplate ? (
               <div className="flex items-center rounded-md border shadow-xs bg-background">
                 <Button
@@ -1126,6 +1199,17 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Apply Template Dialog */}
+      <ApplyTemplateDialog
+        open={applyTemplateDialogOpen}
+        onOpenChange={setApplyTemplateDialogOpen}
+        templates={allTemplates}
+        isLoadingTemplates={isLoadingTemplates}
+        currentItemsCount={items.length}
+        currentTemplateId={workspace?.templateId}
+        onApplyTemplate={handleApplyTemplate}
+      />
     </div>
   );
 }

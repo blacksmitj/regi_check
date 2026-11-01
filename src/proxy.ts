@@ -26,11 +26,6 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Jika sudah login dan mengakses halaman login, arahkan ke root '/'
-  if (pathname === "/login" && sessionToken) {
-    return NextResponse.redirect(new URL("/", request.url));
-  }
-
   return NextResponse.next();
 }
 
