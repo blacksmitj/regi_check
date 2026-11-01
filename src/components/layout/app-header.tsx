@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { ThemeToggle } from "@/components/shared/theme-toggle";
 import { useState, Suspense } from "react";
 
 interface NavItem {
@@ -196,7 +197,8 @@ function AppHeaderInner({ serverUser }: { serverUser?: AppHeaderProps["user"] })
         </div>
 
         {/* Right: User Profile & Actions */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <ThemeToggle />
           {user ? (
             <div className="flex items-center gap-2.5">
               <Avatar className="w-8 h-8 border border-border">

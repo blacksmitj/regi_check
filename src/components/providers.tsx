@@ -2,6 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState, ReactNode, useEffect } from "react";
+import { ThemeProvider } from "next-themes";
 import { useAuthStore } from "@/stores/auth-store";
 
 export function AppProviders({ children }: { children: ReactNode }) {
@@ -23,6 +24,10 @@ export function AppProviders({ children }: { children: ReactNode }) {
     initAuth();
   }, [initAuth]);
 
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  return (
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    </ThemeProvider>
+  );
 }
 
