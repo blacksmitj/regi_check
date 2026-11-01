@@ -14,7 +14,7 @@ export default function ProfilePage() {
   const [resetDone, setResetDone] = useState(false);
 
   const handleResetDemoData = () => {
-    if (confirm("Reset seluruh data mock kembali ke pengaturan awal seed demo?")) {
+    if (confirm("Kosongkan dan reset seluruh data kembali ke kondisi awal yang bersih?")) {
       api.resetMockDB();
       setResetDone(true);
       setTimeout(() => {
@@ -59,9 +59,9 @@ export default function ProfilePage() {
           </div>
 
           <div className="space-y-2 pt-2">
-            <h4 className="text-xs font-semibold">Pengaturan Data Mocking</h4>
+            <h4 className="text-xs font-semibold">Pengaturan Data Sistem</h4>
             <p className="text-[11px] text-muted-foreground">
-              Jika Anda ingin mengembalikan kondisi data (peserta, isian form, dan workspace) ke kondisi awal sebelum pengujian:
+              Jika Anda ingin mengosongkan seluruh data (peserta, form, template, dan workspace) kembali ke state bersih:
             </p>
             <Button
               variant="outline"
@@ -70,7 +70,7 @@ export default function ProfilePage() {
               className="gap-2 text-xs text-rose-600 hover:text-rose-700"
             >
               <RefreshCw className="w-3.5 h-3.5" />
-              {resetDone ? "Data Telah Direset!" : "Reset Data Demo (Seed Awal)"}
+              {resetDone ? "Data Telah Dikosongkan!" : "Kosongkan & Reset Data"}
             </Button>
           </div>
         </CardContent>

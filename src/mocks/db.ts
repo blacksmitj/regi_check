@@ -20,7 +20,7 @@ import {
   SEED_AUDIT_LOGS,
 } from "./seed";
 
-const DB_KEY = "regicheck_mock_db_v3";
+const DB_KEY = "regicheck_mock_db_clean_v1";
 
 interface MockDBData {
   users: User[];
@@ -42,22 +42,16 @@ class MockDatabase {
   }
 
   private getDefaultData(): MockDBData {
-    const workspaceChecklists: Record<string, ChecklistItem[]> = {
-      "ws-kewirausahaan-2026": [...SEED_TEMPLATES[0].items],
-      "ws-sertifikasi-ti": [...SEED_TEMPLATES[1].items],
-      "ws-arsip-2025": [...SEED_TEMPLATES[0].items],
-    };
-
     return {
       users: [...SEED_USERS],
       workspaces: [...SEED_WORKSPACES],
       templates: [...SEED_TEMPLATES],
-      workspaceChecklists,
+      workspaceChecklists: {},
       officers: [...SEED_OFFICERS],
       participants: [...SEED_PARTICIPANTS],
       responses: [...SEED_RESPONSES],
       auditLogs: [...SEED_AUDIT_LOGS],
-      currentUserEmail: "admin@regicheck.id", // default logged in as admin for initial exploration
+      currentUserEmail: "admin@regicheck.id",
     };
   }
 
