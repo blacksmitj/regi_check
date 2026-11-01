@@ -37,6 +37,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useState, Suspense } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/api/client";
 
 interface NavItem {
   label: string;
@@ -99,6 +101,22 @@ function AppHeaderInner({ serverUser }: { serverUser?: AppHeaderProps["user"] })
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
+  const { data: officers = [] } = useQuery({
+    queryKey: ["officers"],
+    queryFn: () => api.getOfficers(),
+    enabled: user?.role === "admin",
+    staleTime: 1000 * 30, // 30 detik
+  });
+
+  const pendingCount =
+    user?.role === "admin"
+      ? officers.filter(
+          (o) =>
+            o.status === "pending" ||
+            (!o.active && o.status !== "rejected" && o.status !== "active")
+        ).length
+      : 0;
+
   const handleLogout = async () => {
     try {
       setIsLoggingOut(true);
@@ -137,18 +155,26 @@ function AppHeaderInner({ serverUser }: { serverUser?: AppHeaderProps["user"] })
                 {filteredNav.map((item) => {
                   const Icon = item.icon;
                   const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
+                  const showPendingBadge = item.href === "/officers" && pendingCount > 0;
                   return (
                     <Link
                       key={item.href}
                       href={item.href}
                       onClick={() => setMobileOpen(false)}
-                      className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive
+                      className={`flex items-center justify-between px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive
                           ? "bg-primary text-primary-foreground"
                           : "text-muted-foreground hover:bg-muted hover:text-foreground"
                         }`}
                     >
-                      <Icon className="w-4 h-4" />
-                      <span>{item.label}</span>
+                      <div className="flex items-center gap-3">
+                        <Icon className="w-4 h-4" />
+                        <span>{item.label}</span>
+                      </div>
+                      {showPendingBadge && (
+                        <span className="bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                          {pendingCount}
+                        </span>
+                      )}
                     </Link>
                   );
                 })}
@@ -196,6 +222,7 @@ function AppHeaderInner({ serverUser }: { serverUser?: AppHeaderProps["user"] })
             {filteredNav.map((item) => {
               const Icon = item.icon;
               const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
+              const showPendingBadge = item.href === "/officers" && pendingCount > 0;
               return (
                 <Link
                   key={item.href}
@@ -207,6 +234,11 @@ function AppHeaderInner({ serverUser }: { serverUser?: AppHeaderProps["user"] })
                 >
                   <Icon className="w-4 h-4" />
                   <span>{item.label}</span>
+                  {showPendingBadge && (
+                    <span className="bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full leading-tight">
+                      {pendingCount}
+                    </span>
+                  )}
                 </Link>
               );
             })}

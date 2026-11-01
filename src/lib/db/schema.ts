@@ -199,6 +199,12 @@ export const officer = pgTable("officer", {
   name: text("name").notNull(),
   email: text("email").notNull(),
   active: boolean("active").notNull().default(true),
+  /** Status pendaftaran: "active" | "pending" | "rejected" */
+  status: text("status").notNull().default("active"), // "active" | "pending" | "rejected"
+  /** workspaceId asal share link yang digunakan saat pertama request */
+  requestedWorkspaceId: text("requested_workspace_id"),
+  /** Waktu request akses masuk */
+  requestedAt: timestamp("requested_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at")
     .notNull()
@@ -206,6 +212,7 @@ export const officer = pgTable("officer", {
     .$onUpdate(() => new Date()),
 }, (table) => [
   index("officer_email_idx").on(table.email),
+  index("officer_status_idx").on(table.status),
 ]);
 
 // ==========================================

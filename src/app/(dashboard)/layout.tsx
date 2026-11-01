@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { headers, cookies } from "next/headers";
-import { getCurrentUser, isUserRegistered } from "@/lib/auth";
+import { getCurrentUser, isUserRegistered, registerPendingOfficerIfNew } from "@/lib/auth";
 import { AppHeader } from "@/components/layout/app-header";
 import { AuthSync } from "@/components/shared/auth-sync";
 
@@ -32,9 +32,20 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
-  // 2. Jika sudah login tetapi belum terdaftar (bukan admin & bukan officer aktif) -> lempar ke pending-approval
+  // 2. Jika sudah login tetapi belum terdaftar (bukan admin & bukan officer aktif)
   const registered = await isUserRegistered(user.email);
   if (!registered) {
+    // Ekstrak workspaceId dari path jika ada (misal: /workspaces/ws-abc123)
+    const wsIdMatch = currentPath.match(/^\/workspaces\/([^/?#]+)/);
+    const matchedId = wsIdMatch?.[1];
+    const requestedWorkspaceId =
+      matchedId && matchedId !== "create" ? matchedId : undefined;
+
+    // Auto-daftarkan sebagai pending jika belum ada sama sekali di DB
+    await registerPendingOfficerIfNew(user.email, user.name, requestedWorkspaceId).catch(
+      (e) => console.error("registerPendingOfficerIfNew failed:", e)
+    );
+
     if (currentPath && currentPath.startsWith("/workspaces/")) {
       redirect(`/pending-approval?callbackUrl=${encodeURIComponent(currentPath)}`);
     }

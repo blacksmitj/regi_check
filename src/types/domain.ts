@@ -126,12 +126,20 @@ export interface Participant {
   updatedAt: string;
 }
 
+export type OfficerStatus = "active" | "pending" | "rejected";
+
 export interface Officer {
   id: string;
   workspaceId?: string; // optional if global or per workspace
   name: string;
   email: string;
   active: boolean;
+  /** Status pendaftaran petugas — pending menunggu approval admin */
+  status?: OfficerStatus;
+  /** workspaceId dari share link yang memicu auto-register */
+  requestedWorkspaceId?: string;
+  /** Timestamp request akses */
+  requestedAt?: string;
   createdAt: string;
 }
 

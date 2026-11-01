@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { db } from "./db";
 import * as schema from "./db/schema";
 import { eq } from "drizzle-orm";
+import crypto from "crypto";
 
 function getAdminEmails(): string[] {
   const envEmails = process.env.ADMIN_EMAILS || "";
@@ -110,6 +111,54 @@ export async function isUserRegistered(email: string): Promise<boolean> {
   });
 
   return !!foundOfficer;
+}
+
+/**
+ * Auto-daftarkan user sebagai petugas pending jika belum ada sama sekali.
+ * Dipanggil saat user login via share link tapi tidak terdaftar.
+ * Mengembalikan true jika baru didaftarkan, false jika sudah ada (apapun statusnya).
+ */
+export async function registerPendingOfficerIfNew(
+  email: string,
+  name: string,
+  requestedWorkspaceId?: string
+): Promise<{ isNew: boolean; status: string }> {
+  if (!email) return { isNew: false, status: "unknown" };
+  if (isEmailAdmin(email)) return { isNew: false, status: "active" };
+
+  const existing = await db.query.officer.findFirst({
+    where: (officers, { eq }) => eq(officers.email, email.trim().toLowerCase()),
+  });
+
+  if (existing) {
+    // Jika masih pending dan sebelumnya belum tercatat workspace asal, perbarui requestedWorkspaceId
+    if (
+      existing.status === "pending" &&
+      !existing.requestedWorkspaceId &&
+      requestedWorkspaceId
+    ) {
+      await db
+        .update(schema.officer)
+        .set({ requestedWorkspaceId })
+        .where(eq(schema.officer.id, existing.id));
+    }
+    const st = existing.status || (existing.active ? "active" : "rejected");
+    return { isNew: false, status: st };
+  }
+
+  // Buat record petugas baru dengan status pending
+  const newId = `off_${crypto.randomUUID()}`;
+  await db.insert(schema.officer).values({
+    id: newId,
+    name: name || email.split("@")[0],
+    email: email.trim().toLowerCase(),
+    active: false,
+    status: "pending",
+    requestedWorkspaceId: requestedWorkspaceId || null,
+    requestedAt: new Date(),
+  });
+
+  return { isNew: true, status: "pending" };
 }
 
 export async function requireAuth() {

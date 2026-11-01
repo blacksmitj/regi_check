@@ -371,6 +371,25 @@ class MockDatabase {
     this.save();
   }
 
+  public registerPendingOfficer(email: string, name: string, requestedWorkspaceId?: string): Officer {
+    const existing = this.data.officers.find((o) => o.email.toLowerCase() === email.toLowerCase());
+    if (existing) return existing;
+
+    const newOfficer: Officer = {
+      id: `off-${Date.now().toString(36)}`,
+      name: name || email.split("@")[0],
+      email: email.toLowerCase(),
+      active: false,
+      status: "pending",
+      requestedWorkspaceId,
+      requestedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+    };
+    this.data.officers.unshift(newOfficer);
+    this.save();
+    return newOfficer;
+  }
+
   // --- Audit Logs ---
   public getAuditLogs(workspaceId?: string): AuditLog[] {
     if (workspaceId) {

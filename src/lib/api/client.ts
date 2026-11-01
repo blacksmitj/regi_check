@@ -485,6 +485,22 @@ export const api = {
     });
   },
 
+  async updateOfficer(
+    id: string,
+    updates: Partial<Officer>
+  ): Promise<Officer> {
+    return fetchJson<Officer>(`/api/officers/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(updates),
+    });
+  },
+
+  async deleteOfficer(id: string): Promise<void> {
+    await fetchJson<{ success: boolean }>(`/api/officers/${id}`, {
+      method: "DELETE",
+    });
+  },
+
   // --- Audit Logs ---
   async getAuditLogs(workspaceId?: string): Promise<AuditLog[]> {
     const url = workspaceId

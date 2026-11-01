@@ -5,6 +5,22 @@ import { eq, desc } from "drizzle-orm";
 import crypto from "crypto";
 import { Officer } from "@/types/domain";
 
+function mapOfficer(o: typeof officer.$inferSelect): Officer {
+  return {
+    id: o.id,
+    workspaceId: o.workspaceId || undefined,
+    name: o.name,
+    email: o.email,
+    active: o.active,
+    status: ((o as { status?: string }).status as Officer["status"]) || (o.active ? "active" : "rejected"),
+    requestedWorkspaceId: (o as { requestedWorkspaceId?: string | null }).requestedWorkspaceId || undefined,
+    requestedAt: (o as { requestedAt?: Date | null }).requestedAt
+      ? ((o as { requestedAt?: Date | null }).requestedAt as Date).toISOString()
+      : undefined,
+    createdAt: o.createdAt.toISOString(),
+  };
+}
+
 export async function GET() {
   try {
     const officers = await db
@@ -12,16 +28,7 @@ export async function GET() {
       .from(officer)
       .orderBy(desc(officer.createdAt));
 
-    const result: Officer[] = officers.map((o) => ({
-      id: o.id,
-      workspaceId: o.workspaceId || undefined,
-      name: o.name,
-      email: o.email,
-      active: o.active,
-      createdAt: o.createdAt.toISOString(),
-    }));
-
-    return NextResponse.json(result);
+    return NextResponse.json(officers.map(mapOfficer));
   } catch (error) {
     console.error("GET /api/officers error:", error);
     return NextResponse.json(
@@ -48,6 +55,9 @@ export async function POST(req: NextRequest) {
           name: o.name,
           email: o.email,
           active: o.active ?? true,
+          status: o.status || (o.active ? "active" : "rejected"),
+          requestedWorkspaceId: o.requestedWorkspaceId || null,
+          requestedAt: o.requestedAt ? new Date(o.requestedAt) : null,
         }));
         await db.insert(officer).values(toInsert);
       }
@@ -55,7 +65,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true });
     }
 
-    const { name, email, workspaceId, active = true } = body;
+    const { name, email, workspaceId, active = true, status = "active" } = body;
     if (!name || !email) {
       return NextResponse.json(
         { error: "Nama dan email wajib diisi" },
@@ -72,20 +82,11 @@ export async function POST(req: NextRequest) {
         email,
         workspaceId: workspaceId || null,
         active,
+        status,
       })
       .returning();
 
-    return NextResponse.json(
-      {
-        id: created.id,
-        workspaceId: created.workspaceId || undefined,
-        name: created.name,
-        email: created.email,
-        active: created.active,
-        createdAt: created.createdAt.toISOString(),
-      },
-      { status: 201 }
-    );
+    return NextResponse.json(mapOfficer(created), { status: 201 });
   } catch (error) {
     console.error("POST /api/officers error:", error);
     return NextResponse.json(

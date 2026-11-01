@@ -419,10 +419,10 @@ export function WorkspaceDetailClient({ workspaceId }: { workspaceId: string }) 
               await queryClient.invalidateQueries({ queryKey: ["participants", workspaceId] });
               await queryClient.invalidateQueries({ queryKey: ["responses"] });
               await queryClient.invalidateQueries({ queryKey: ["auditLogs"] });
-              toast.success("Data form berhasil dibersihkan & di-reset ke kondisi awal");
+              toast.add({ type: "success", title: "Data form berhasil dibersihkan & di-reset ke kondisi awal" });
             } catch (err) {
               console.error(err);
-              toast.error("Gagal membersihkan data form workspace");
+              toast.add({ type: "error", title: "Gagal membersihkan data form workspace" });
             }
           } else {
             await api.deleteWorkspace(workspaceId);

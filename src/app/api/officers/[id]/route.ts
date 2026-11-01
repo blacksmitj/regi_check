@@ -34,6 +34,11 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
       name: updated.name,
       email: updated.email,
       active: updated.active,
+      status: (updated as { status?: string }).status || (updated.active ? "active" : "rejected"),
+      requestedWorkspaceId: (updated as { requestedWorkspaceId?: string | null }).requestedWorkspaceId || undefined,
+      requestedAt: (updated as { requestedAt?: Date | null }).requestedAt
+        ? ((updated as { requestedAt?: Date | null }).requestedAt as Date).toISOString()
+        : undefined,
       createdAt: updated.createdAt.toISOString(),
     });
   } catch (error) {
@@ -43,6 +48,10 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
       { status: 500 }
     );
   }
+}
+
+export async function PATCH(req: NextRequest, { params }: RouteParams) {
+  return PUT(req, { params });
 }
 
 export async function DELETE(req: NextRequest, { params }: RouteParams) {

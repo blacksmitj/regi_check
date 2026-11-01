@@ -97,10 +97,10 @@ export function WorkspaceShareDialog({
 
           <div className="rounded-lg border border-border bg-muted/30 p-3 text-[11px] text-muted-foreground space-y-1">
             <p className="font-semibold text-foreground flex items-center gap-1.5">
-              <span>💡</span> Catatan Petugas:
+              <span>💡</span> Alur Akses Petugas:
             </p>
             <p>
-              Pastikan email Google petugas sudah terdaftar aktif di menu Petugas agar dapat langsung mengakses workspace tanpa perlu persetujuan manual.
+              Petugas yang membuka tautan dan login menggunakan Google akan otomatis terdata di menu <strong>Petugas</strong> (status <em>Menunggu Persetujuan</em>). Admin cukup menekan tombol <strong>Setujui</strong> agar petugas langsung aktif mengelola workspace ini.
             </p>
           </div>
         </div>
