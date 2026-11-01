@@ -274,23 +274,34 @@ function DrawerInner({
             <div className="space-y-3 pt-2 border-t border-border">
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
-                  <Label className="text-xs font-medium">Wajib Diisi (Required)</Label>
-                  <p className="text-[11px] text-muted-foreground">Form tidak lengkap bila field ini kosong</p>
-                </div>
-                <Switch
-                  checked={formData.required}
-                  onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, required: checked }))}
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
                   <Label className="text-xs font-medium">Dapat Diedit Petugas (Editable)</Label>
                   <p className="text-[11px] text-muted-foreground">Petugas dapat mengubah nilai saat registrasi</p>
                 </div>
                 <Switch
                   checked={formData.editable}
-                  onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, editable: checked }))}
+                  onCheckedChange={(checked) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      editable: checked,
+                      // Jika no-edit (checked = false), otomatis no-required
+                      required: !checked ? false : prev.required,
+                    }))
+                  }
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-xs font-medium">Wajib Diisi (Required)</Label>
+                  <p className="text-[11px] text-muted-foreground">
+                    Form tidak lengkap bila field ini kosong
+                    {!formData.editable && " (dinonaktifkan jika field non-editable)"}
+                  </p>
+                </div>
+                <Switch
+                  checked={formData.required}
+                  disabled={!formData.editable}
+                  onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, required: checked }))}
                 />
               </div>
 

@@ -17,6 +17,8 @@ import {
   FolderPlus,
   PlusCircle,
   BookmarkPlus,
+  BookmarkCheck,
+  ChevronDown,
   Loader2,
 } from "lucide-react";
 import {
@@ -30,6 +32,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -50,6 +53,13 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
   const { data: workspace } = useQuery({
     queryKey: ["workspace", workspaceId],
     queryFn: () => api.getWorkspace(workspaceId),
+  });
+
+  // Associated template if workspace has templateId
+  const { data: associatedTemplate } = useQuery({
+    queryKey: ["template", workspace?.templateId],
+    queryFn: () => (workspace?.templateId ? api.getTemplate(workspace.templateId) : null),
+    enabled: Boolean(workspace?.templateId),
   });
 
   // Existing Form fields
@@ -78,7 +88,7 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
   const [saveTemplateDialogOpen, setSaveTemplateDialogOpen] = useState(false);
   const [templateName, setTemplateName] = useState("");
   const [templateDesc, setTemplateDesc] = useState("");
-  const [templateSavedSuccess, setTemplateSavedSuccess] = useState(false);
+  const [templateSavedNotice, setTemplateSavedNotice] = useState<string | null>(null);
 
   useEffect(() => {
     if (initialItems.length > 0) {
@@ -141,6 +151,31 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
     },
   });
 
+  const updateExistingTemplateMutation = useMutation({
+    mutationFn: async () => {
+      if (!associatedTemplate) {
+        throw new Error("Template tidak ditemukan");
+      }
+      const now = new Date().toISOString();
+      const updatedTemplate = {
+        ...associatedTemplate,
+        sampleColumns: availableColumnNames,
+        items: items.map((it, idx) => ({
+          ...it,
+          order: idx + 1,
+        })),
+        updatedAt: now,
+      };
+      return api.saveTemplate(updatedTemplate);
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["templates"] });
+      queryClient.invalidateQueries({ queryKey: ["template", data.id] });
+      setTemplateSavedNotice(`Template "${data.name}" Berhasil Diperbarui!`);
+      setTimeout(() => setTemplateSavedNotice(null), 4000);
+    },
+  });
+
   const saveAsTemplateMutation = useMutation({
     mutationFn: async () => {
       const now = new Date().toISOString();
@@ -156,13 +191,20 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
         createdAt: now,
         updatedAt: now,
       };
-      return api.saveTemplate(newTemplate);
+      const created = await api.saveTemplate(newTemplate);
+      // Hubungkan workspace ini dengan template baru
+      if (workspaceId) {
+        await api.updateWorkspace(workspaceId, { templateId: created.id });
+      }
+      return created;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["templates"] });
+      queryClient.invalidateQueries({ queryKey: ["workspace", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ["template", data.id] });
       setSaveTemplateDialogOpen(false);
-      setTemplateSavedSuccess(true);
-      setTimeout(() => setTemplateSavedSuccess(false), 4000);
+      setTemplateSavedNotice(`Template Baru "${data.name}" Tersimpan!`);
+      setTimeout(() => setTemplateSavedNotice(null), 4000);
     },
   });
 
@@ -568,6 +610,43 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
   const totalFieldsCount = items.filter((it) => it.type !== "section").length;
   const totalSectionsCount = items.filter((it) => it.type === "section").length;
 
+  // Status status agregat untuk bulk switch
+  const nonSectionItems = useMemo(() => items.filter((it) => it.type !== "section"), [items]);
+  const allEditable = nonSectionItems.length > 0 && nonSectionItems.every((it) => it.editable !== false);
+  const allRequired = nonSectionItems.length > 0 && nonSectionItems.every((it) => it.required === true);
+
+  // Toggle semua editable
+  const handleToggleAllEditable = (enable: boolean) => {
+    setItems((prev) =>
+      prev.map((it) => {
+        if (it.type === "section") return it;
+        return {
+          ...it,
+          editable: enable,
+          // Jika no-edit (enable === false), otomatis no-required
+          required: !enable ? false : it.required,
+        };
+      })
+    );
+  };
+
+  // Toggle semua required
+  const handleToggleAllRequired = (enable: boolean) => {
+    setItems((prev) =>
+      prev.map((it) => {
+        if (it.type === "section") return it;
+        // Jika field non-editable, required tidak boleh diaktifkan (tetap false)
+        if (enable && it.editable === false) {
+          return it;
+        }
+        return {
+          ...it,
+          required: enable,
+        };
+      })
+    );
+  };
+
   return (
     <div className="flex-1 flex flex-col min-h-0 pb-20">
       <div className="p-6 max-w-7xl mx-auto w-full space-y-5 flex-1">
@@ -593,30 +672,78 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
           </div>
 
           <div className="hidden sm:flex items-center gap-2">
-            {templateSavedSuccess && (
+            {templateSavedNotice && (
               <span className="text-xs font-medium text-emerald-600 flex items-center gap-1 animate-in fade-in">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                Template Berhasil Dibuat!
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                <span className="max-w-[220px] truncate">{templateSavedNotice}</span>
               </span>
             )}
             {isSavedNotice && (
               <span className="text-xs font-medium text-emerald-600 flex items-center gap-1 animate-in fade-in">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                Perubahan Form Tersimpan!
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                <span>Perubahan Form Tersimpan!</span>
               </span>
             )}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleOpenSaveTemplateModal}
-              disabled={items.length === 0}
-              className="gap-1.5 text-xs shadow-xs"
-              title="Simpan konfigurasi form saat ini sebagai Master Template"
-            >
-              <BookmarkPlus className="w-3.5 h-3.5 text-primary" />
-              Simpan Jadi Template
-            </Button>
+
+            {associatedTemplate ? (
+              <div className="flex items-center rounded-md border shadow-xs bg-background">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => updateExistingTemplateMutation.mutate()}
+                  disabled={items.length === 0 || updateExistingTemplateMutation.isPending}
+                  className="h-8 gap-1.5 text-xs rounded-r-none px-2.5 font-medium hover:bg-muted"
+                  title={`Perbarui template yang terhubung: ${associatedTemplate.name}`}
+                >
+                  {updateExistingTemplateMutation.isPending ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <BookmarkCheck className="w-3.5 h-3.5 text-primary" />
+                  )}
+                  <span>Perbarui Template</span>
+                </Button>
+                <div className="w-[1px] h-4 bg-border" />
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-7 rounded-l-none px-0 hover:bg-muted"
+                        title="Opsi Template Lainnya"
+                      />
+                    }
+                  >
+                    <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuItem
+                      onClick={handleOpenSaveTemplateModal}
+                      className="text-xs cursor-pointer gap-2"
+                    >
+                      <BookmarkPlus className="w-3.5 h-3.5 text-primary" />
+                      <span>Simpan Sebagai Template Baru</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleOpenSaveTemplateModal}
+                disabled={items.length === 0}
+                className="gap-1.5 text-xs shadow-xs"
+                title="Simpan konfigurasi form saat ini sebagai Master Template"
+              >
+                <BookmarkPlus className="w-3.5 h-3.5 text-primary" />
+                Simpan Jadi Template
+              </Button>
+            )}
+
             <Button
               size="sm"
               onClick={() => saveMutation.mutate(items)}
@@ -645,7 +772,7 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
           {/* Kanan: Urutan & Pengaturan Form (8 kolom grid) */}
           <div className="lg:col-span-8 space-y-4">
           <Card className="border shadow-xs bg-card">
-            <CardHeader className="p-4 pb-3 border-b border-border/70 flex flex-row items-center justify-between gap-2">
+            <CardHeader className="p-4 pb-3 border-b border-border/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <CardTitle className="text-sm font-semibold flex items-center gap-2">
                   <FileCheck2 className="w-4 h-4 text-primary" />
@@ -655,15 +782,61 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
                   Tambahkan <strong>Section / Group</strong> untuk mengelompokkan field secara berurutan, atau gunakan tombol panah atas/bawah untuk mengatur posisi.
                 </CardDescription>
               </div>
-              <div className="flex items-center gap-1.5 shrink-0">
-                {totalSectionsCount > 0 && (
-                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary">
-                    {totalSectionsCount} Grup
-                  </span>
+
+              <div className="flex flex-wrap items-center gap-3 shrink-0">
+                {nonSectionItems.length > 0 && (
+                  <div className="flex items-center gap-3 bg-muted/40 border border-border/80 px-2.5 py-1.5 rounded-lg text-xs">
+                    {/* Bulk Switch: Editable to All */}
+                    <div className="flex items-center gap-1.5" title="Aktifkan/nonaktifkan edit untuk semua field. Jika non-editable, otomatis no required.">
+                      <Switch
+                        id="bulk-toggle-editable"
+                        checked={allEditable}
+                        onCheckedChange={handleToggleAllEditable}
+                        className="scale-75 origin-center"
+                      />
+                      <Label
+                        htmlFor="bulk-toggle-editable"
+                        className="text-[11px] font-medium cursor-pointer select-none text-muted-foreground hover:text-foreground"
+                      >
+                        {allEditable ? "Semua Editable" : "Non-Editable Semua"}
+                      </Label>
+                    </div>
+
+                    <div className="w-[1px] h-3.5 bg-border" />
+
+                    {/* Bulk Switch: Required to All */}
+                    <div className="flex items-center gap-1.5" title="Aktifkan/nonaktifkan wajib isi untuk semua field yang editable.">
+                      <Switch
+                        id="bulk-toggle-required"
+                        checked={allRequired}
+                        disabled={!allEditable && nonSectionItems.every((it) => it.editable === false)}
+                        onCheckedChange={handleToggleAllRequired}
+                        className="scale-75 origin-center"
+                      />
+                      <Label
+                        htmlFor="bulk-toggle-required"
+                        className={`text-[11px] font-medium cursor-pointer select-none ${
+                          !allEditable && nonSectionItems.every((it) => it.editable === false)
+                            ? "text-muted-foreground/50 cursor-not-allowed"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        {allRequired ? "Semua Wajib" : "No Required Semua"}
+                      </Label>
+                    </div>
+                  </div>
                 )}
-                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
-                  {totalFieldsCount} Field
-                </span>
+
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {totalSectionsCount > 0 && (
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                      {totalSectionsCount} Grup
+                    </span>
+                  )}
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                    {totalFieldsCount} Field
+                  </span>
+                </div>
               </div>
             </CardHeader>
 
@@ -766,10 +939,10 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
                 <> &bull; <span className="font-semibold text-foreground">{totalSectionsCount}</span> seksi</>
               )}
             </div>
-            {templateSavedSuccess && (
+            {templateSavedNotice && (
               <span className="text-xs font-medium text-emerald-600 flex items-center gap-1 animate-in fade-in">
                 <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate">Template Berhasil Dibuat!</span>
+                <span className="max-w-[200px] truncate">{templateSavedNotice}</span>
               </span>
             )}
             {isSavedNotice && (
@@ -781,18 +954,65 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleOpenSaveTemplateModal}
-              disabled={items.length === 0}
-              className="gap-1.5 text-xs shadow-xs"
-              title="Simpan konfigurasi form saat ini sebagai Master Template"
-            >
-              <BookmarkPlus className="w-3.5 h-3.5 text-primary" />
-              <span className="hidden sm:inline">Simpan Jadi</span> Template
-            </Button>
+            {associatedTemplate ? (
+              <div className="flex items-center rounded-md border shadow-xs bg-background">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => updateExistingTemplateMutation.mutate()}
+                  disabled={items.length === 0 || updateExistingTemplateMutation.isPending}
+                  className="h-8 gap-1.5 text-xs rounded-r-none px-2.5 font-medium hover:bg-muted"
+                  title={`Perbarui template yang terhubung: ${associatedTemplate.name}`}
+                >
+                  {updateExistingTemplateMutation.isPending ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <BookmarkCheck className="w-3.5 h-3.5 text-primary" />
+                  )}
+                  <span>Perbarui Template</span>
+                </Button>
+                <div className="w-[1px] h-4 bg-border" />
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-7 rounded-l-none px-0 hover:bg-muted"
+                        title="Opsi Template Lainnya"
+                      />
+                    }
+                  >
+                    <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuItem
+                      onClick={handleOpenSaveTemplateModal}
+                      className="text-xs cursor-pointer gap-2"
+                    >
+                      <BookmarkPlus className="w-3.5 h-3.5 text-primary" />
+                      <span>Simpan Sebagai Template Baru</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleOpenSaveTemplateModal}
+                disabled={items.length === 0}
+                className="gap-1.5 text-xs shadow-xs"
+                title="Simpan konfigurasi form saat ini sebagai Master Template"
+              >
+                <BookmarkPlus className="w-3.5 h-3.5 text-primary" />
+                <span className="hidden sm:inline">Simpan Jadi</span> Template
+              </Button>
+            )}
+
             <Button
               size="sm"
               onClick={() => saveMutation.mutate(items)}

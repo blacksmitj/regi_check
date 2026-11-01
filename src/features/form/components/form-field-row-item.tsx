@@ -269,6 +269,12 @@ export function FormFieldRowItem({
               </Badge>
             )}
 
+            {item.editable === false && (
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0 font-medium text-muted-foreground border-dashed bg-muted/30">
+                Non-Editable
+              </Badge>
+            )}
+
             {item.evidenceEnabled && (
               <Badge variant="secondary" className="text-[9px] px-1.5 py-0 gap-1 bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30">
                 <Camera className="w-2.5 h-2.5" />

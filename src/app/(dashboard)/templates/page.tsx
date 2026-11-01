@@ -272,7 +272,7 @@ export default function TemplatesPage() {
               <AlertCircle className="w-5 h-5" />
               Hapus Template Form?
             </AlertDialogTitle>
-            <AlertDialogDescription className="text-xs text-muted-foreground space-y-2">
+            <AlertDialogDescription render={<div className="text-xs text-muted-foreground space-y-2" />}>
               <p>
                 Anda akan menghapus template{" "}
                 <span className="font-semibold text-foreground">
