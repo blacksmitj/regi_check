@@ -66,7 +66,7 @@ export function SortableFormFieldItem({
 
   if (isSection) {
     return (
-      <div className="transition-all duration-200 ease-in-out">
+      <div id={`form-item-row-${item.id}`} className="transition-all duration-200 ease-in-out">
         <Card className="border-2 shadow-xs border-primary/30 bg-primary/5 hover:border-primary/50 transition-all">
           <CardContent className="p-3 space-y-2">
             <div className="flex items-center justify-between gap-3">
@@ -186,6 +186,7 @@ export function SortableFormFieldItem({
 
   return (
     <div
+      id={`form-item-row-${item.id}`}
       className={`transition-all duration-200 ease-in-out ${
         isUnderSection ? "ml-4 sm:ml-6" : ""
       }`}

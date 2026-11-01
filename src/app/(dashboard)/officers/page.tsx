@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
+import { useAuthStore } from "@/stores/auth-store";
 import { Officer } from "@/types/domain";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,7 +24,16 @@ import {
 import { EmptyState } from "@/components/shared/empty-state";
 
 export default function OfficersPage() {
+  const router = useRouter();
+  const { user } = useAuthStore();
   const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (user && user.role !== "admin") {
+      router.replace("/workspaces");
+    }
+  }, [user, router]);
+
   const [search, setSearch] = useState("");
   const [pasteInput, setPasteInput] = useState("");
   const [isAdding, setIsAdding] = useState(false);

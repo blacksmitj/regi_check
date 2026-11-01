@@ -61,10 +61,19 @@ function AppHeaderInner() {
   const pathname = usePathname();
   const { user, logout } = useAuthStore();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const handleLogout = async () => {
-    await logout();
-    router.push("/login");
+    try {
+      setIsLoggingOut(true);
+      await logout();
+      router.push("/login");
+      router.refresh();
+    } catch (error) {
+      console.error("Gagal keluar:", error);
+    } finally {
+      setIsLoggingOut(false);
+    }
   };
 
   const filteredNav = NAV_ITEMS.filter((item) => {
@@ -108,6 +117,34 @@ function AppHeaderInner() {
                   );
                 })}
               </nav>
+
+              {user && (
+                <div className="pt-4 mt-6 border-t border-border">
+                  <div className="flex items-center gap-2.5 px-2 mb-3">
+                    <Avatar className="w-8 h-8 border border-border">
+                      {user.avatarUrl && <AvatarImage src={user.avatarUrl} alt={user.name} />}
+                      <AvatarFallback>{user.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+                    </Avatar>
+                    <div className="flex flex-col text-left overflow-hidden">
+                      <span className="text-xs font-semibold leading-tight truncate">{user.name}</span>
+                      <span className="text-[10px] text-muted-foreground truncate">{user.email}</span>
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setMobileOpen(false);
+                      handleLogout();
+                    }}
+                    disabled={isLoggingOut}
+                    className="w-full justify-start text-xs text-destructive hover:bg-destructive/10 hover:text-destructive gap-2.5"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span>{isLoggingOut ? "Keluar..." : "Keluar (Logout)"}</span>
+                  </Button>
+                </div>
+              )}
             </SheetContent>
           </Sheet>
 
@@ -163,10 +200,12 @@ function AppHeaderInner() {
                 variant="ghost"
                 size="icon"
                 onClick={handleLogout}
+                disabled={isLoggingOut}
                 title="Keluar (Logout)"
-                className="text-muted-foreground hover:text-destructive"
+                aria-label="Keluar (Logout)"
+                className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
               >
-                <LogOut className="w-4 h-4" />
+                <LogOut className={`w-4 h-4 ${isLoggingOut ? "animate-pulse" : ""}`} />
               </Button>
             </div>
           ) : (

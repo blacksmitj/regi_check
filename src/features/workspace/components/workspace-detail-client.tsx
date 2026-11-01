@@ -242,6 +242,7 @@ export function WorkspaceDetailClient({ workspaceId }: { workspaceId: string }) 
       <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden">
         <ParticipantSidebar
           participants={participants}
+          workspace={workspace}
           selectedId={selectedParticipantId}
           onSelect={(id) => {
             setSelectedParticipantId(id);
@@ -262,12 +263,22 @@ export function WorkspaceDetailClient({ workspaceId }: { workspaceId: string }) 
               }}
               onUpdateParticipantData={async (updatedData) => {
                 try {
-                  setSyncStatus("saving");
-                  await api.updateParticipant(activeParticipant.id, { data: updatedData });
-                  queryClient.invalidateQueries({ queryKey: ["participants", workspaceId] });
-                  setSyncStatus("saved");
-                } catch {
+                  setSyncStatus("syncing");
+                  await api.updateParticipant(
+                    activeParticipant.id,
+                    {
+                      data: updatedData,
+                      officerName: user?.name || "Petugas",
+                      officerEmail: user?.email || "petugas@regicheck.id",
+                    },
+                    workspaceId
+                  );
+                  await queryClient.invalidateQueries({ queryKey: ["participants", workspaceId] });
+                  await queryClient.invalidateQueries({ queryKey: ["auditLogs"] });
+                  setSyncStatus("synced");
+                } catch (err) {
                   setSyncStatus("error");
+                  throw err;
                 }
               }}
               syncStatus={syncStatus}

@@ -51,7 +51,7 @@ export function calculateParticipantStatus(
   const data = dataOrResponses || {};
 
   for (const field of activeFields) {
-    if (!field.required) continue;
+    if (!field.required || field.editable === false) continue;
 
     // Check by excelColumn, id, or label
     const val =
@@ -61,7 +61,11 @@ export function calculateParticipantStatus(
           ? data[field.id]
           : data[field.label];
 
-    if (val === undefined || val === null || val === "") {
+    if (val === undefined || val === null) {
+      return "incomplete";
+    }
+
+    if (typeof val === "string" && val.trim() === "") {
       return "incomplete";
     }
 

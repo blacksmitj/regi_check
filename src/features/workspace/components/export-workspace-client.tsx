@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import * as XLSX from "xlsx";
 import { Download, ArrowLeft, CheckCircle2 } from "lucide-react";
-import { ParticipantStatus } from "@/types/domain";
+import { ParticipantStatus, OfficerHistoryItem } from "@/types/domain";
 
 export function ExportWorkspaceClient({ workspaceId }: { workspaceId: string }) {
   const [filterStatus, setFilterStatus] = useState<"all" | ParticipantStatus>("all");
@@ -34,22 +34,124 @@ export function ExportWorkspaceClient({ workspaceId }: { workspaceId: string }) 
     return p.status === filterStatus;
   });
 
+  const resolveParticipantName = (data: Record<string, unknown>): string => {
+    if (workspace?.nameColumn && data[workspace.nameColumn] !== undefined && String(data[workspace.nameColumn]).trim() !== "") {
+      return String(data[workspace.nameColumn]);
+    }
+    if (data["Nama Lengkap"] !== undefined && String(data["Nama Lengkap"]).trim() !== "") {
+      return String(data["Nama Lengkap"]);
+    }
+    if (data["Nama"] !== undefined && String(data["Nama"]).trim() !== "") {
+      return String(data["Nama"]);
+    }
+    const matchedKey = Object.keys(data).find(
+      (k) => !k.startsWith("_") && /nama|name/i.test(k) && String(data[k] ?? "").trim() !== ""
+    );
+    return matchedKey ? String(data[matchedKey]) : "-";
+  };
+
+  const resolveParticipantNikOrKey = (data: Record<string, unknown>): string => {
+    if (workspace?.uniqueKeyColumn && data[workspace.uniqueKeyColumn] !== undefined && String(data[workspace.uniqueKeyColumn]).trim() !== "") {
+      return String(data[workspace.uniqueKeyColumn]);
+    }
+    if (data["NIK"] !== undefined && String(data["NIK"]).trim() !== "") {
+      return String(data["NIK"]);
+    }
+    const matchedKey = Object.keys(data).find(
+      (k) => !k.startsWith("_") && /nik|ktp|nim|id|nomor/i.test(k) && String(data[k] ?? "").trim() !== ""
+    );
+    return matchedKey ? String(data[matchedKey]) : "-";
+  };
+
+  const resolveFieldValue = (data: Record<string, unknown>, field: (typeof formFields)[number]): unknown => {
+    const candidates = [field.excelColumn, field.id, field.label].filter(Boolean) as string[];
+    for (const candidate of candidates) {
+      if (data[candidate] !== undefined && data[candidate] !== null && String(data[candidate]).trim() !== "") {
+        return data[candidate];
+      }
+    }
+    // Case-insensitive lookup against participant.data keys
+    const dataKeys = Object.keys(data).filter((k) => !k.startsWith("_"));
+    for (const candidate of candidates) {
+      const lowerCandidate = candidate.trim().toLowerCase();
+      const matchedKey = dataKeys.find((k) => k.trim().toLowerCase() === lowerCandidate);
+      if (matchedKey && data[matchedKey] !== undefined && data[matchedKey] !== null && String(data[matchedKey]).trim() !== "") {
+        return data[matchedKey];
+      }
+    }
+    return undefined;
+  };
+
   const handleExportExcel = () => {
     const exportRows = filtered.map((p, idx) => {
+      const resolvedName = resolveParticipantName(p.data);
+      const resolvedNik = resolveParticipantNikOrKey(p.data);
+
       const row: Record<string, unknown> = {
         No: idx + 1,
-        Nama: p.data["Nama Lengkap"] || p.data["Nama"] || "-",
-        NIK: p.data["NIK"] || "-",
+        Nama: resolvedName,
+        NIK: resolvedNik,
         Status: p.status === "complete" ? "Lengkap" : p.status === "rejected" ? "Ditolak" : "Belum Lengkap",
       };
 
       formFields
         .filter((i) => i.active && i.type !== "section")
         .forEach((field) => {
-          const key = field.excelColumn || field.id;
-          const val = p.data[key] !== undefined ? p.data[key] : p.data[field.id] ?? p.data[field.label];
-          row[field.label] = val !== undefined && val !== null && val !== "" ? String(val) : "-";
+          const val = resolveFieldValue(p.data, field);
+          const formattedVal = val !== undefined && val !== null && String(val).trim() !== "" ? String(val) : "-";
+
+          // Hindari menimpa kolom dasar Nama / NIK yang sudah terisi dengan "-" jika ada field form berlabel sama yang kosong
+          if ((field.label === "NIK" || field.label === "Nama") && formattedVal === "-" && row[field.label] && row[field.label] !== "-") {
+            return;
+          }
+
+          row[field.label] = formattedVal;
         });
+
+      const historyRaw = p.data["_officerHistory"];
+      const historyList: OfficerHistoryItem[] = Array.isArray(historyRaw)
+        ? (historyRaw as OfficerHistoryItem[])
+        : [];
+      const lastUpdatedBy = p.data["_lastUpdatedBy"]
+        ? String(p.data["_lastUpdatedBy"])
+        : historyList.length > 0
+          ? historyList[historyList.length - 1].officerName
+          : "-";
+      const lastUpdatedAtRaw = p.data["_lastUpdatedAt"]
+        ? String(p.data["_lastUpdatedAt"])
+        : historyList.length > 0
+          ? historyList[historyList.length - 1].timestamp
+          : "";
+      const lastUpdatedAtFormatted = lastUpdatedAtRaw
+        ? new Date(lastUpdatedAtRaw).toLocaleString("id-ID", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+        : "-";
+
+      const historyFormatted =
+        historyList.length > 0
+          ? historyList
+              .map((h) => {
+                const timeStr = new Date(h.timestamp).toLocaleString("id-ID", {
+                  day: "2-digit",
+                  month: "short",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                });
+                return `${h.officerName} (${timeStr})`;
+              })
+              .join(" → ")
+          : lastUpdatedBy !== "-"
+            ? `${lastUpdatedBy} (${lastUpdatedAtFormatted})`
+            : "-";
+
+      row["Terakhir Diubah Oleh"] = lastUpdatedBy;
+      row["Waktu Update Terakhir"] = lastUpdatedAtFormatted;
+      row["Riwayat Petugas (Awal - Akhir)"] = historyFormatted;
 
       return row;
     });

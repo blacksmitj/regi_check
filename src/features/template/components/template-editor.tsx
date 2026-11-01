@@ -174,6 +174,15 @@ export function TemplateEditor({ templateId }: TemplateEditorProps) {
     },
   });
 
+  const smoothScrollToItem = (id: string) => {
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`form-item-row-${id}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+    });
+  };
+
   const handleMoveItem = (id: string, direction: "up" | "down") => {
     setItems((prev) => {
       const index = prev.findIndex((it) => it.id === id);
@@ -186,6 +195,7 @@ export function TemplateEditor({ templateId }: TemplateEditorProps) {
       updated.splice(targetIndex, 0, moved);
       return updated.map((it, idx) => ({ ...it, order: idx + 1 }));
     });
+    smoothScrollToItem(id);
   };
 
   const handleOpenCreateSectionModal = () => {
@@ -289,6 +299,7 @@ export function TemplateEditor({ templateId }: TemplateEditorProps) {
       updatedBlocks.splice(targetIdx, 0, movedBlock);
       return updatedBlocks.flat().map((it, idx) => ({ ...it, order: idx + 1 }));
     });
+    smoothScrollToItem(sectionId);
   };
 
   const itemLayoutMeta = useMemo(() => {

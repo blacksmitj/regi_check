@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   Participant,
   Workspace,
   FormField,
   SyncStatus,
   EvidenceFile,
+  OfficerHistoryItem,
 } from "@/types/domain";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,14 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -24,7 +33,13 @@ import {
 } from "@/components/ui/select";
 import { AutosaveIndicator } from "@/components/shared/autosave-indicator";
 import { StatusBadge } from "@/components/shared/status-badge";
-import { saveEvidenceFile, getEvidenceBlobUrl } from "@/lib/storage/indexed-db";
+import {
+  saveEvidenceFile,
+  getEvidenceBlobUrl,
+  saveOfflineDraft,
+  getOfflineDraft,
+  deleteOfflineDraft,
+} from "@/lib/storage/indexed-db";
 import { MediaPreviewModal } from "@/components/shared/media-preview-modal";
 import {
   isGoogleDriveUrl,
@@ -44,6 +59,9 @@ import {
   ChevronDown,
   ChevronRight,
   FolderKanban,
+  History,
+  UserCheck,
+  Clock,
 } from "lucide-react";
 
 interface FormEntryPanelProps {
@@ -84,6 +102,8 @@ export function FormEntryPanel({
   const [formData, setFormData] = useState<Record<string, unknown>>({});
   const [evidenceMap, setEvidenceMap] = useState<Record<string, EvidenceFile[]>>({});
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+  const [invalidFieldIds, setInvalidFieldIds] = useState<Set<string>>(new Set());
+  const fieldCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   // Media preview modal state
   const [previewModal, setPreviewModal] = useState<{
@@ -119,9 +139,199 @@ export function FormEntryPanel({
   };
 
   // Sync participant data into local state when participant changes
+  // Local draft (IndexedDB) wins over server data; refetches never overwrite unsaved edits.
+  const formDataRef = useRef<Record<string, unknown>>({});
+  const versionRef = useRef(0); // increments on every local edit
+  const dirtyRef = useRef(false);
+  const [dirty, setDirty] = useState(false);
+  const [draftLoading, setDraftLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState(false);
+
+  const applyFormData = (data: Record<string, unknown>) => {
+    formDataRef.current = data;
+    setFormData(data);
+  };
+
+  // Load draft when participant changes
   useEffect(() => {
-    setFormData(participant.data || {});
-  }, [participant.id, participant.data]);
+    let cancelled = false;
+    setDraftLoading(true);
+    setSaveError(false);
+    setInvalidFieldIds(new Set());
+    dirtyRef.current = false;
+    setDirty(false);
+    (async () => {
+      let draft;
+      try {
+        draft = await getOfflineDraft(participant.id);
+      } catch (err) {
+        console.error("Failed to load offline draft", err);
+      }
+      if (cancelled) return;
+      if (draft?.data) {
+        dirtyRef.current = true;
+        setDirty(true);
+        applyFormData(draft.data);
+      } else {
+        applyFormData(participant.data || {});
+      }
+      setDraftLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [participant.id]);
+
+  // Accept server data only when there are no unsaved local edits
+  useEffect(() => {
+    if (draftLoading || dirtyRef.current) return;
+    applyFormData(participant.data || {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [participant.data, draftLoading]);
+
+  // Helper to check if a single field is filled against a given data object
+  const checkFieldFilled = (
+    f: FormField,
+    data: Record<string, unknown>
+  ): boolean => {
+    const key = f.excelColumn || f.id;
+    const val =
+      data[key] !== undefined ? data[key] : data[f.id] ?? data[f.label];
+    if (val === undefined || val === null) return false;
+    if (typeof val === "string" && val.trim() === "") return false;
+    if (f.type === "checkbox") {
+      return val === true || val === "true" || val === "Ya" || val === 1;
+    }
+    return true;
+  };
+
+  // Helper to check if a single field is filled in current state
+  const isFieldFilled = (f: FormField): boolean => checkFieldFilled(f, formData);
+
+  // Calculate statistics (excluding section headers)
+  const activeItems = useMemo(() => fields.filter((f) => f.active), [fields]);
+  const activeInputFields = useMemo(
+    () => activeItems.filter((f) => f.type !== "section"),
+    [activeItems]
+  );
+  const requiredFields = useMemo(
+    () => activeInputFields.filter((f) => f.required && f.editable !== false),
+    [activeInputFields]
+  );
+  const filledRequiredCount = requiredFields.filter(isFieldFilled).length;
+  const hasMissingRequired = filledRequiredCount < requiredFields.length;
+
+  // Group items into ordered sections
+  const { hasAnyExplicitSection, sectionGroups } = useMemo(() => {
+    const hasExplicit = activeItems.some((f) => f.type === "section");
+    const groups: FormSectionGroup[] = [];
+    let currentGroup: FormSectionGroup | null = null;
+    let fieldCounter = 0;
+
+    for (const item of activeItems) {
+      if (item.type === "section") {
+        currentGroup = {
+          id: item.id,
+          title: item.label || "Bagian Form",
+          description: item.description,
+          isExplicitSection: true,
+          fields: [],
+        };
+        groups.push(currentGroup);
+      } else {
+        fieldCounter += 1;
+        if (!currentGroup) {
+          currentGroup = {
+            id: "default-top-section",
+            title: hasExplicit ? "Informasi Umum" : "Formulir Data Peserta",
+            description: hasExplicit
+              ? "Field pembuka sebelum bagian pertama"
+              : undefined,
+            isExplicitSection: false,
+            fields: [],
+          };
+          groups.push(currentGroup);
+        }
+        currentGroup.fields.push({
+          field: item,
+          globalNumber: fieldCounter,
+        });
+      }
+    }
+
+    return {
+      hasAnyExplicitSection: hasExplicit,
+      sectionGroups: groups,
+    };
+  }, [activeItems]);
+
+  const scrollToAndFocusField = (fieldId: string) => {
+    const cardEl = fieldCardRefs.current[fieldId];
+    if (!cardEl) return;
+
+    cardEl.scrollIntoView({ behavior: "smooth", block: "center" });
+
+    const focusable = cardEl.querySelector<HTMLElement>(
+      'input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    );
+    if (focusable) {
+      focusable.focus({ preventScroll: true });
+    }
+  };
+
+  const handleSave = async () => {
+    if (!onUpdateParticipantData || saving || draftLoading) return;
+
+    const currentData = formDataRef.current;
+    const missingRequired = requiredFields.filter(
+      (f) => !checkFieldFilled(f, currentData)
+    );
+
+    if (missingRequired.length > 0) {
+      setInvalidFieldIds(new Set(missingRequired.map((f) => f.id)));
+
+      const firstMissing = missingRequired[0];
+      const containingGroup = sectionGroups.find((g) =>
+        g.fields.some((item) => item.field.id === firstMissing.id)
+      );
+
+      if (containingGroup && collapsedSections[containingGroup.id]) {
+        setCollapsedSections((prev) => ({
+          ...prev,
+          [containingGroup.id]: false,
+        }));
+        setTimeout(() => {
+          scrollToAndFocusField(firstMissing.id);
+        }, 80);
+      } else {
+        scrollToAndFocusField(firstMissing.id);
+      }
+      return;
+    }
+
+    setInvalidFieldIds(new Set());
+    if (!dirtyRef.current) return;
+
+    const sentVersion = versionRef.current;
+    const sentData = formDataRef.current;
+    setSaving(true);
+    setSaveError(false);
+    try {
+      await onUpdateParticipantData(sentData);
+      // Only clear the draft if the user did not edit while the request was in flight
+      if (versionRef.current === sentVersion) {
+        await deleteOfflineDraft(participant.id);
+        dirtyRef.current = false;
+        setDirty(false);
+      }
+    } catch {
+      setSaveError(true);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   // Dynamic Name resolution based on workspace settings or fallback
   const resolvedNameKey =
@@ -157,12 +367,68 @@ export function FormEntryPanel({
       : rawMainPhotoUrl
     : "";
 
+  // Extract officer update history from participant.data
+  const officerHistory: OfficerHistoryItem[] = useMemo(() => {
+    const raw = participant.data?.["_officerHistory"];
+    if (Array.isArray(raw)) {
+      return raw as OfficerHistoryItem[];
+    }
+    if (participant.data?.["_lastUpdatedBy"]) {
+      return [
+        {
+          officerName: String(participant.data["_lastUpdatedBy"]),
+          officerEmail: String(participant.data["_lastUpdatedEmail"] || ""),
+          timestamp: String(
+            participant.data["_lastUpdatedAt"] || participant.updatedAt
+          ),
+          action: "Memperbarui Data Peserta",
+        },
+      ];
+    }
+    return [];
+  }, [participant.data, participant.updatedAt]);
+
+  const lastOfficer =
+    officerHistory.length > 0
+      ? officerHistory[officerHistory.length - 1]
+      : null;
+
   // Update a single form field value
   const handleFieldValueChange = async (key: string, value: unknown) => {
-    const nextData = { ...formData, [key]: value };
-    setFormData(nextData);
-    if (onUpdateParticipantData) {
-      await onUpdateParticipantData(nextData);
+    // Always build from the latest ref, never from a stale render closure
+    const nextData = { ...formDataRef.current, [key]: value };
+    versionRef.current += 1;
+    dirtyRef.current = true;
+    setDirty(true);
+    applyFormData(nextData);
+
+    // Clear validation error for any field that is now filled
+    setInvalidFieldIds((prev) => {
+      if (prev.size === 0) return prev;
+      let changed = false;
+      const next = new Set(prev);
+      for (const f of requiredFields) {
+        if (next.has(f.id) && checkFieldFilled(f, nextData)) {
+          next.delete(f.id);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+
+    try {
+      await saveOfflineDraft({
+        workspaceId: participant.workspaceId,
+        participantId: participant.id,
+        updatedAt: new Date().toISOString(),
+        syncStatus: "pending",
+        userEmail: "",
+        version: versionRef.current,
+        data: nextData,
+        responses: {},
+      });
+    } catch (err) {
+      console.error("Failed to save local draft", err);
     }
   };
 
@@ -215,73 +481,6 @@ export function FormEntryPanel({
     }
   };
 
-  // Helper to check if a single field is filled
-  const isFieldFilled = (f: FormField): boolean => {
-    const key = f.excelColumn || f.id;
-    const val =
-      formData[key] !== undefined
-        ? formData[key]
-        : formData[f.id] ?? formData[f.label];
-    if (val === undefined || val === null || val === "") return false;
-    if (f.type === "checkbox") {
-      return val === true || val === "true" || val === "Ya" || val === 1;
-    }
-    return true;
-  };
-
-  // Calculate statistics (excluding section headers)
-  const activeItems = useMemo(() => fields.filter((f) => f.active), [fields]);
-  const activeInputFields = useMemo(
-    () => activeItems.filter((f) => f.type !== "section"),
-    [activeItems]
-  );
-  const requiredFields = activeInputFields.filter((f) => f.required);
-  const filledRequiredCount = requiredFields.filter(isFieldFilled).length;
-
-  // Group items into ordered sections
-  const { hasAnyExplicitSection, sectionGroups } = useMemo(() => {
-    const hasExplicit = activeItems.some((f) => f.type === "section");
-    const groups: FormSectionGroup[] = [];
-    let currentGroup: FormSectionGroup | null = null;
-    let fieldCounter = 0;
-
-    for (const item of activeItems) {
-      if (item.type === "section") {
-        currentGroup = {
-          id: item.id,
-          title: item.label || "Bagian Form",
-          description: item.description,
-          isExplicitSection: true,
-          fields: [],
-        };
-        groups.push(currentGroup);
-      } else {
-        fieldCounter += 1;
-        if (!currentGroup) {
-          currentGroup = {
-            id: "default-top-section",
-            title: hasExplicit ? "Informasi Umum" : "Formulir Data Peserta",
-            description: hasExplicit
-              ? "Field pembuka sebelum bagian pertama"
-              : undefined,
-            isExplicitSection: false,
-            fields: [],
-          };
-          groups.push(currentGroup);
-        }
-        currentGroup.fields.push({
-          field: item,
-          globalNumber: fieldCounter,
-        });
-      }
-    }
-
-    return {
-      hasAnyExplicitSection: hasExplicit,
-      sectionGroups: groups,
-    };
-  }, [activeItems]);
-
   // Render a single field item
   const renderFieldCard = (field: FormField, displayIndex: number) => {
     const fieldKey = field.excelColumn || field.id;
@@ -293,21 +492,39 @@ export function FormEntryPanel({
           : formData[field.label];
 
     const isEditable = field.editable ?? true;
+    const isInvalid = invalidFieldIds.has(field.id);
 
     return (
       <div
         key={field.id}
-        className="space-y-1.5 p-2 rounded-md hover:bg-muted/40 transition-colors"
+        ref={(el) => {
+          fieldCardRefs.current[field.id] = el;
+        }}
+        className={`space-y-1.5 p-2.5 rounded-md border transition-all ${
+          isInvalid
+            ? "border-rose-500/80 bg-rose-500/5 ring-2 ring-rose-500/20"
+            : "border-transparent hover:bg-muted/40"
+        }`}
       >
         {/* Field Header */}
         <div className="flex items-center justify-between gap-1.5">
           <div className="flex items-center gap-1.5 min-w-0">
-            <span className="w-4 h-4 rounded-full bg-muted flex items-center justify-center text-[9px] font-bold text-muted-foreground shrink-0">
+            <span
+              className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 ${
+                isInvalid
+                  ? "bg-rose-500 text-white"
+                  : "bg-muted text-muted-foreground"
+              }`}
+            >
               {displayIndex}
             </span>
             <Label
               htmlFor={`form-input-${field.id}`}
-              className="text-xs font-semibold text-foreground cursor-pointer truncate"
+              className={`text-xs font-semibold cursor-pointer truncate ${
+                isInvalid
+                  ? "text-rose-600 dark:text-rose-400"
+                  : "text-foreground"
+              }`}
               title={field.label}
             >
               {field.label}
@@ -719,6 +936,13 @@ export function FormEntryPanel({
                   </div>
                 );
               })()}
+
+            {isInvalid && (
+              <p className="text-[11px] font-medium text-rose-600 dark:text-rose-400 flex items-center gap-1 pt-1">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                <span>Wajib diisi terlebih dahulu sebelum menyimpan</span>
+              </p>
+            )}
           </div>
       </div>
     );
@@ -774,18 +998,169 @@ export function FormEntryPanel({
               </h2>
               <StatusBadge status={participant.status} />
             </div>
-            <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
+            <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5 flex-wrap">
               <span>{resolvedUniqueKeyLabel}: <span className="font-medium text-foreground">{uniqueKeyValue}</span></span>
               <span>•</span>
               <span>
                 HP: {String(formData["Nomor HP"] || formData["HP"] || "-")}
               </span>
             </div>
+            {lastOfficer ? (
+              <div className="text-[11px] text-muted-foreground flex items-center gap-1.5 mt-1 flex-wrap">
+                <UserCheck className="w-3.5 h-3.5 text-primary shrink-0" />
+                <span>
+                  Terakhir diubah oleh{" "}
+                  <span className="font-semibold text-foreground">
+                    {lastOfficer.officerName}
+                  </span>{" "}
+                  pada{" "}
+                  <span className="font-medium text-foreground">
+                    {new Date(lastOfficer.timestamp).toLocaleString("id-ID", {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                </span>
+              </div>
+            ) : (
+              <div className="text-[11px] text-muted-foreground/70 flex items-center gap-1 mt-1">
+                <Clock className="w-3 h-3 shrink-0" />
+                <span>Belum ada riwayat perubahan oleh petugas</span>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Progress & Sync Status */}
-        <div className="flex items-center gap-3 shrink-0 self-end sm:self-center">
+        <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-center flex-wrap">
+          {/* Drawer Riwayat Petugas (Awal - Akhir) */}
+          <Sheet>
+            <SheetTrigger
+              render={
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 text-xs gap-1.5"
+                />
+              }
+            >
+              <History className="w-3.5 h-3.5 text-primary" />
+              <span>Riwayat Petugas</span>
+              {officerHistory.length > 0 && (
+                <Badge
+                  variant="secondary"
+                  className="text-[10px] px-1.5 py-0 h-4 ml-0.5"
+                >
+                  {officerHistory.length}
+                </Badge>
+              )}
+            </SheetTrigger>
+            <SheetContent side="right" className="w-full sm:max-w-md flex flex-col p-0">
+              <SheetHeader className="p-4 border-b border-border">
+                <SheetTitle className="text-sm font-bold flex items-center gap-2">
+                  <History className="w-4 h-4 text-primary" />
+                  Riwayat Petugas Pemeriksa
+                </SheetTitle>
+                <SheetDescription className="text-xs">
+                  Urutan riwayat petugas yang melakukan perubahan pada{" "}
+                  <span className="font-semibold text-foreground">
+                    {participantName}
+                  </span>{" "}
+                  dari awal hingga terakhir.
+                </SheetDescription>
+              </SheetHeader>
+
+              <div className="flex-1 overflow-y-auto p-4">
+                {officerHistory.length === 0 ? (
+                  <div className="py-12 text-center text-muted-foreground space-y-2">
+                    <History className="w-8 h-8 mx-auto opacity-40" />
+                    <p className="text-xs font-medium">
+                      Belum ada riwayat perubahan
+                    </p>
+                    <p className="text-[11px] text-muted-foreground/80">
+                      Nama petugas akan tercatat otomatis saat tombol Simpan ditekan.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="relative pl-5 space-y-4 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-border">
+                    {officerHistory.map((item, idx) => {
+                      const isFirst = idx === 0;
+                      const isLatest = idx === officerHistory.length - 1;
+                      return (
+                        <div
+                          key={`${item.timestamp}-${idx}`}
+                          className="relative flex flex-col gap-1 rounded-lg border border-border bg-card p-3 shadow-2xs"
+                        >
+                          <span
+                            className={`absolute -left-[17px] top-3.5 w-2.5 h-2.5 rounded-full ring-4 ring-background ${
+                              isLatest
+                                ? "bg-emerald-500"
+                                : isFirst
+                                  ? "bg-primary"
+                                  : "bg-muted-foreground/50"
+                            }`}
+                          />
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-bold text-foreground">
+                              {item.officerName}
+                            </span>
+                            <div className="flex items-center gap-1">
+                              {isFirst && officerHistory.length > 1 && (
+                                <Badge
+                                  variant="outline"
+                                  className="text-[9px] px-1.5 py-0 h-4"
+                                >
+                                  Awal (#1)
+                                </Badge>
+                              )}
+                              {isLatest ? (
+                                <Badge className="text-[9px] px-1.5 py-0 h-4 bg-emerald-600 hover:bg-emerald-600 text-white">
+                                  Terakhir (#{idx + 1})
+                                </Badge>
+                              ) : (
+                                !isFirst && (
+                                  <Badge
+                                    variant="secondary"
+                                    className="text-[9px] px-1.5 py-0 h-4"
+                                  >
+                                    #{idx + 1}
+                                  </Badge>
+                                )
+                              )}
+                            </div>
+                          </div>
+                          {item.officerEmail && (
+                            <span className="text-[10px] text-muted-foreground">
+                              {item.officerEmail}
+                            </span>
+                          )}
+                          <div className="text-[11px] text-muted-foreground font-mono flex items-center gap-1.5 mt-1 pt-1 border-t border-border/60">
+                            <Clock className="w-3 h-3 text-primary shrink-0" />
+                            <span>
+                              {new Date(item.timestamp).toLocaleString(
+                                "id-ID",
+                                {
+                                  day: "2-digit",
+                                  month: "short",
+                                  year: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                  second: "2-digit",
+                                }
+                              )}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </SheetContent>
+          </Sheet>
           <div className="text-right">
             <div className="text-xs font-semibold text-foreground">
               {filledRequiredCount} dari {requiredFields.length} Wajib Terisi
@@ -807,7 +1182,33 @@ export function FormEntryPanel({
               />
             </div>
           </div>
-          <AutosaveIndicator status={syncStatus} />
+          <div className="flex flex-col items-end gap-1">
+            <AutosaveIndicator
+              status={
+                saveError
+                  ? "error"
+                  : saving
+                    ? "syncing"
+                    : dirty
+                      ? "pending"
+                      : syncStatus
+              }
+              onRetry={saveError ? handleSave : undefined}
+            />
+            {dirty && !saving && (
+              <span className="text-[10px] text-amber-600 dark:text-amber-400">
+                Belum disimpan ke server
+              </span>
+            )}
+          </div>
+          <Button
+            size="sm"
+            onClick={handleSave}
+            disabled={(!dirty && !hasMissingRequired) || saving || draftLoading}
+            className="h-8 text-xs"
+          >
+            {saving ? "Menyimpan..." : "Simpan"}
+          </Button>
         </div>
       </div>
 

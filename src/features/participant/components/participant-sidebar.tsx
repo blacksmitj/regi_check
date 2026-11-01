@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Participant, ParticipantStatus } from "@/types/domain";
+import { Participant, ParticipantStatus, Workspace } from "@/types/domain";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/shared/status-badge";
-import { Search, ChevronLeft, ChevronRight, User } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, User, UserCheck } from "lucide-react";
 import {
   isGoogleDriveUrl,
   getGoogleDriveThumbnailUrl,
@@ -14,6 +14,7 @@ import {
 
 interface ParticipantSidebarProps {
   participants: Participant[];
+  workspace?: Workspace;
   selectedId: string | null;
   onSelect: (id: string) => void;
   className?: string;
@@ -21,6 +22,7 @@ interface ParticipantSidebarProps {
 
 export function ParticipantSidebar({
   participants,
+  workspace,
   selectedId,
   onSelect,
   className,
@@ -28,9 +30,34 @@ export function ParticipantSidebar({
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<"all" | ParticipantStatus>("all");
 
+  const getParticipantName = (data: Record<string, unknown>): string => {
+    if (workspace?.nameColumn && data[workspace.nameColumn] !== undefined && String(data[workspace.nameColumn]).trim() !== "") {
+      return String(data[workspace.nameColumn]);
+    }
+    if (data["Nama Lengkap"] !== undefined && String(data["Nama Lengkap"]).trim() !== "") {
+      return String(data["Nama Lengkap"]);
+    }
+    if (data["Nama"] !== undefined && String(data["Nama"]).trim() !== "") {
+      return String(data["Nama"]);
+    }
+    const key = Object.keys(data).find((k) => !k.startsWith("_") && /nama|name/i.test(k));
+    return key ? String(data[key] || "") : "";
+  };
+
+  const getParticipantKey = (data: Record<string, unknown>): { label: string; value: string } => {
+    if (workspace?.uniqueKeyColumn && data[workspace.uniqueKeyColumn] !== undefined) {
+      return { label: workspace.uniqueKeyColumn, value: String(data[workspace.uniqueKeyColumn] || "") };
+    }
+    if (data["NIK"] !== undefined) {
+      return { label: "NIK", value: String(data["NIK"] || "") };
+    }
+    const key = Object.keys(data).find((k) => !k.startsWith("_") && /nik|ktp|nim|id|nomor/i.test(k));
+    return key ? { label: key, value: String(data[key] || "") } : { label: "NIK", value: "" };
+  };
+
   const filtered = participants.filter((p) => {
-    const name = String(p.data["Nama Lengkap"] || p.data["Nama"] || "");
-    const nik = String(p.data["NIK"] || "");
+    const name = getParticipantName(p.data);
+    const { value: nik } = getParticipantKey(p.data);
     const matchSearch =
       name.toLowerCase().includes(search.toLowerCase()) ||
       nik.toLowerCase().includes(search.toLowerCase());
@@ -145,10 +172,13 @@ export function ParticipantSidebar({
         ) : (
           filtered.map((p) => {
             const isSelected = p.id === selectedId;
-            const name = String(p.data["Nama Lengkap"] || p.data["Nama"] || "Peserta Tanpa Nama");
-            const nik = String(p.data["NIK"] || "");
+            const name = getParticipantName(p.data) || "Peserta Tanpa Nama";
+            const { label: keyLabel, value: nik } = getParticipantKey(p.data);
             // Look for any photo in participant data
-            const photoKey = Object.keys(p.data).find((k) => /foto|photo|avatar|gambar/i.test(k));
+            const photoKey =
+              workspace?.photoColumn && workspace.photoColumn !== "none" && p.data[workspace.photoColumn] !== undefined
+                ? workspace.photoColumn
+                : Object.keys(p.data).find((k) => /foto|photo|avatar|gambar/i.test(k));
             const rawPhotoVal = photoKey ? String(p.data[photoKey] || "") : "";
             const photoVal = rawPhotoVal
               ? isGoogleDriveUrl(rawPhotoVal)
@@ -157,6 +187,8 @@ export function ParticipantSidebar({
               : "";
             // Mask NIK for security (§15.1)
             const maskedNik = nik.length > 8 ? `${nik.slice(0, 4)}********${nik.slice(-4)}` : nik;
+            const lastOfficer = p.data["_lastUpdatedBy"] ? String(p.data["_lastUpdatedBy"]) : "";
+            const lastUpdatedAt = p.data["_lastUpdatedAt"] ? String(p.data["_lastUpdatedAt"]) : "";
 
             return (
               <div
@@ -185,8 +217,23 @@ export function ParticipantSidebar({
                         {name}
                       </p>
                       {maskedNik && (
-                        <p className="text-[11px] text-muted-foreground font-mono mt-0.5">
-                          NIK: {maskedNik}
+                        <p className="text-[11px] text-muted-foreground font-mono mt-0.5 truncate">
+                          {keyLabel}: {maskedNik}
+                        </p>
+                      )}
+                      {lastOfficer && (
+                        <p className="text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5 truncate">
+                          <UserCheck className="w-3 h-3 text-primary shrink-0" />
+                          <span className="truncate font-medium text-foreground/80">{lastOfficer}</span>
+                          {lastUpdatedAt && (
+                            <span className="shrink-0 opacity-75">
+                              •{" "}
+                              {new Date(lastUpdatedAt).toLocaleTimeString("id-ID", {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </span>
+                          )}
                         </p>
                       )}
                     </div>

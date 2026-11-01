@@ -109,6 +109,13 @@ export interface ChecklistResponse {
   updatedAt?: string;
 }
 
+export interface OfficerHistoryItem {
+  officerName: string;
+  officerEmail: string;
+  timestamp: string;
+  action?: string;
+}
+
 export interface Participant {
   id: string;
   workspaceId: string;
@@ -151,6 +158,8 @@ export interface ParticipantDraft {
   syncStatus: SyncStatus;
   userEmail: string;
   version: number;
+  /** Draft of participant.data edited in the form entry panel (not yet synced). */
+  data?: Record<string, unknown>;
   responses: Record<string, {
     value: unknown;
     status: ChecklistItemStatus;

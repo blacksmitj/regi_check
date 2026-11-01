@@ -81,6 +81,7 @@ export function FormFieldRowItem({
   if (isSection) {
     return (
       <div
+        id={`form-item-row-${item.id}`}
         className="group flex items-center justify-between gap-3 p-3 rounded-lg border-2 border-primary/30 bg-primary/5 hover:border-primary/50 transition-all duration-200 ease-in-out"
       >
         {/* Kiri: Tombol Atas/Bawah + Icon Section + Judul & Info */}
@@ -197,6 +198,7 @@ export function FormFieldRowItem({
 
   return (
     <div
+      id={`form-item-row-${item.id}`}
       className={`group flex items-center justify-between gap-3 p-3 bg-card border rounded-lg transition-all duration-200 ease-in-out hover:border-border/80 hover:shadow-xs ${
         isUnderSection ? "ml-4 sm:ml-6 border-l-4 border-l-primary/40" : ""
       }`}
@@ -283,7 +285,7 @@ export function FormFieldRowItem({
       {/* Kanan: Aksi (Pindah Grup, Edit Drawer, Hapus) */}
       <div className="flex items-center gap-1 shrink-0">
         {availableSections.length > 0 && onMoveToSection && (
-          <DropdownMenu>
+          <DropdownMenu modal={false}>
             <DropdownMenuTrigger
               render={
                 <Button
@@ -298,7 +300,7 @@ export function FormFieldRowItem({
               <FolderInput className="w-3.5 h-3.5 text-primary" />
               <span className="hidden sm:inline">Pindah Grup</span>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuContent align="end" className="w-56" finalFocus={false}>
               <DropdownMenuGroup>
                 <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground">
                   Pindahkan ke Grup:

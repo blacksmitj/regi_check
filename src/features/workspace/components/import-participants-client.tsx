@@ -39,6 +39,9 @@ import {
   CheckCircle2,
   FileCheck,
   ChevronRight,
+  ChevronLeft,
+  ChevronsLeft,
+  ChevronsRight,
   Download,
   FileType,
   Settings2,
@@ -102,6 +105,8 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
   const [analyzedRows, setAnalyzedRows] = useState<AnalyzedRow[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [filterTab, setFilterTab] = useState<"all" | "duplicates" | "new">("all");
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(10);
 
   // Step 3: Result state
   const [importResult, setImportResult] = useState<{
@@ -374,6 +379,14 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
       return matchKey || matchAnyData;
     });
   }, [analyzedRows, filterTab, searchQuery]);
+
+  // Pagination for Step 2 table preview
+  const totalPages = Math.max(1, Math.ceil(filteredAnalyzedRows.length / pageSize));
+  const validCurrentPage = Math.min(currentPage, totalPages);
+  const paginatedAnalyzedRows = useMemo(() => {
+    const start = (validCurrentPage - 1) * pageSize;
+    return filteredAnalyzedRows.slice(start, start + pageSize);
+  }, [filteredAnalyzedRows, validCurrentPage, pageSize]);
 
   // Secondary preview columns for Step 2 table (2-3 first columns other than the key)
   const secondaryPreviewHeaders = useMemo(() => {
@@ -926,7 +939,10 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
                 <div className="flex items-center gap-1.5 bg-muted/60 p-1 rounded-lg border text-xs w-full sm:w-auto">
                   <button
                     type="button"
-                    onClick={() => setFilterTab("all")}
+                    onClick={() => {
+                      setFilterTab("all");
+                      setCurrentPage(1);
+                    }}
                     className={`px-3 py-1 rounded-md transition-colors text-xs font-medium ${filterTab === "all"
                         ? "bg-background text-foreground shadow-xs font-semibold"
                         : "text-muted-foreground hover:text-foreground"
@@ -936,7 +952,10 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
                   </button>
                   <button
                     type="button"
-                    onClick={() => setFilterTab("duplicates")}
+                    onClick={() => {
+                      setFilterTab("duplicates");
+                      setCurrentPage(1);
+                    }}
                     className={`px-3 py-1 rounded-md transition-colors text-xs font-medium ${filterTab === "duplicates"
                         ? "bg-background text-amber-600 shadow-xs font-semibold"
                         : "text-muted-foreground hover:text-amber-600"
@@ -946,7 +965,10 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
                   </button>
                   <button
                     type="button"
-                    onClick={() => setFilterTab("new")}
+                    onClick={() => {
+                      setFilterTab("new");
+                      setCurrentPage(1);
+                    }}
                     className={`px-3 py-1 rounded-md transition-colors text-xs font-medium ${filterTab === "new"
                         ? "bg-background text-emerald-600 shadow-xs font-semibold"
                         : "text-muted-foreground hover:text-emerald-600"
@@ -961,7 +983,10 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
                   <Input
                     placeholder={`Cari ${selectedKeyField} atau data lainnya...`}
                     value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      setCurrentPage(1);
+                    }}
                     className="h-8 pl-8 text-xs"
                   />
                 </div>
@@ -994,7 +1019,7 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredAnalyzedRows.map((row) => (
+                      paginatedAnalyzedRows.map((row) => (
                         <TableRow
                           key={row.rowIdx}
                           className={row.isDuplicate ? "bg-amber-500/[0.03]" : ""}
@@ -1083,6 +1108,112 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
                   </TableBody>
                 </Table>
               </div>
+
+              {/* Pagination Controls */}
+              {filteredAnalyzedRows.length > 0 && (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-1">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground order-2 sm:order-1">
+                    <span>
+                      Menampilkan{" "}
+                      <strong>
+                        {Math.min(
+                          (validCurrentPage - 1) * pageSize + 1,
+                          filteredAnalyzedRows.length
+                        )}
+                      </strong>
+                      {" - "}
+                      <strong>
+                        {Math.min(
+                          validCurrentPage * pageSize,
+                          filteredAnalyzedRows.length
+                        )}
+                      </strong>{" "}
+                      dari <strong>{filteredAnalyzedRows.length}</strong> entri
+                    </span>
+
+                    <span className="text-muted-foreground/40">|</span>
+
+                    <div className="flex items-center gap-1.5">
+                      <span>Per hal:</span>
+                      <Select
+                        value={String(pageSize)}
+                        onValueChange={(val) => {
+                          setPageSize(Number(val));
+                          setCurrentPage(1);
+                        }}
+                      >
+                        <SelectTrigger className="h-7 w-[68px] text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="10" className="text-xs">
+                            10
+                          </SelectItem>
+                          <SelectItem value="25" className="text-xs">
+                            25
+                          </SelectItem>
+                          <SelectItem value="50" className="text-xs">
+                            50
+                          </SelectItem>
+                          <SelectItem value="100" className="text-xs">
+                            100
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1 order-1 sm:order-2">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={() => setCurrentPage(1)}
+                      disabled={validCurrentPage <= 1}
+                      title="Halaman Pertama"
+                    >
+                      <ChevronsLeft className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                      disabled={validCurrentPage <= 1}
+                      title="Sebelumnya"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                    </Button>
+
+                    <span className="px-2.5 text-xs font-medium text-foreground">
+                      Hal {validCurrentPage} dari {totalPages}
+                    </span>
+
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={() =>
+                        setCurrentPage((prev) => Math.min(totalPages, prev + 1))
+                      }
+                      disabled={validCurrentPage >= totalPages}
+                      title="Selanjutnya"
+                    >
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={() => setCurrentPage(totalPages)}
+                      disabled={validCurrentPage >= totalPages}
+                      title="Halaman Terakhir"
+                    >
+                      <ChevronsRight className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              )}
             </CardContent>
 
             <CardFooter className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-border pt-4">

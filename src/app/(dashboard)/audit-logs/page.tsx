@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
+import { useAuthStore } from "@/stores/auth-store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +12,15 @@ import { History, Search, Filter } from "lucide-react";
 import { EmptyState } from "@/components/shared/empty-state";
 
 export default function AuditLogsPage() {
+  const router = useRouter();
+  const { user } = useAuthStore();
+
+  useEffect(() => {
+    if (user && user.role !== "admin") {
+      router.replace("/workspaces");
+    }
+  }, [user, router]);
+
   const [search, setSearch] = useState("");
 
   const { data: logs = [], isLoading } = useQuery({
@@ -71,7 +82,10 @@ export default function AuditLogsPage() {
               {filtered.map((log) => (
                 <tr key={log.id} className="hover:bg-muted/20">
                   <td className="p-3 text-muted-foreground font-mono whitespace-nowrap">
-                    {new Date(log.timestamp).toLocaleTimeString("id-ID", {
+                    {new Date(log.timestamp).toLocaleString("id-ID", {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
                       hour: "2-digit",
                       minute: "2-digit",
                     })}

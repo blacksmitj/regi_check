@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,7 +25,14 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { EmptyState } from "@/components/shared/empty-state";
 
 export default function DashboardPage() {
+  const router = useRouter();
   const { user } = useAuthStore();
+
+  useEffect(() => {
+    if (user && user.role === "officer") {
+      router.replace("/workspaces");
+    }
+  }, [user, router]);
 
   const { data: workspaces = [], isLoading: loadingWs } = useQuery({
     queryKey: ["workspaces"],

@@ -69,7 +69,13 @@ export const api = {
 
   async logout(): Promise<void> {
     try {
-      await fetch("/api/auth/sign-out", { method: "POST" });
+      await fetch("/api/auth/sign-out", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({}),
+      });
     } catch (e) {
       console.warn("Logout request failed:", e);
     }
@@ -214,7 +220,10 @@ export const api = {
 
   async updateParticipant(
     id: string,
-    updates: Partial<Participant>,
+    updates: Partial<Participant> & {
+      officerName?: string;
+      officerEmail?: string;
+    },
     workspaceId?: string
   ): Promise<Participant> {
     let wsId = workspaceId;

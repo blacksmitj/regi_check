@@ -92,6 +92,7 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
     participants.forEach((p: Participant) => {
       if (p.data && typeof p.data === "object") {
         Object.entries(p.data).forEach(([key, val]) => {
+          if (key.startsWith("_")) return;
           if (!colMap.has(key)) {
             colMap.set(key, val !== undefined && val !== null ? String(val) : "");
           } else if (!colMap.get(key) && val) {
@@ -161,6 +162,16 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
     setSaveTemplateDialogOpen(true);
   };
 
+  // Helper to smoothly scroll moved item into view if near/outside viewport
+  const smoothScrollToItem = (id: string) => {
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`form-item-row-${id}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+    });
+  };
+
   // Move single item up or down
   const handleMoveItem = (id: string, direction: "up" | "down") => {
     setItems((prev) => {
@@ -174,6 +185,7 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
       updated.splice(targetIndex, 0, moved);
       return updated.map((it, idx) => ({ ...it, order: idx + 1 }));
     });
+    smoothScrollToItem(id);
   };
 
   // Helper to get sample values for a column
@@ -355,10 +367,31 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
       updatedBlocks.splice(targetIdx, 0, movedBlock);
       return updatedBlocks.flat().map((it, idx) => ({ ...it, order: idx + 1 }));
     });
+    smoothScrollToItem(sectionId);
   };
 
   // Move an individual item to a specific section group (or "none" for top of form)
   const handleMoveItemToSection = (itemId: string, targetSectionId: string) => {
+    // Kunci posisi scroll semua container yang bisa di-scroll agar halaman tidak lompat
+    const saved: Array<{ el: Element; top: number }> = [];
+    let node: Element | null = document.getElementById(`form-item-row-${itemId}`);
+    while (node) {
+      if (node.scrollHeight > node.clientHeight) {
+        saved.push({ el: node, top: node.scrollTop });
+      }
+      node = node.parentElement;
+    }
+    const scroller = document.scrollingElement;
+    if (scroller && !saved.some((s) => s.el === scroller)) {
+      saved.push({ el: scroller, top: scroller.scrollTop });
+    }
+    const restore = () => saved.forEach((s) => ((s.el as HTMLElement).scrollTop = s.top));
+    requestAnimationFrame(() => {
+      restore();
+      requestAnimationFrame(restore);
+      setTimeout(restore, 80);
+    });
+
     setItems((prev) => {
       const itemToMove = prev.find((it) => it.id === itemId);
       if (!itemToMove) return prev;
@@ -630,7 +663,7 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
                   </div>
                 </div>
               ) : (
-                <div className="space-y-1">
+                <div className="space-y-1" style={{ overflowAnchor: "none" }}>
                   {/* Insertion divider di posisi paling atas (index 0) */}
                   <InsertDivider
                     onAddCustomField={() => handleCreateCustomField(0)}

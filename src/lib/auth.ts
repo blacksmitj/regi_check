@@ -97,6 +97,21 @@ export async function getCurrentUser() {
   };
 }
 
+/**
+ * Memeriksa apakah user terdaftar (Admin atau Petugas aktif di tabel officer)
+ */
+export async function isUserRegistered(email: string): Promise<boolean> {
+  if (!email) return false;
+  if (isEmailAdmin(email)) return true;
+
+  const foundOfficer = await db.query.officer.findFirst({
+    where: (officers, { eq, and }) =>
+      and(eq(officers.email, email.trim().toLowerCase()), eq(officers.active, true)),
+  });
+
+  return !!foundOfficer;
+}
+
 export async function requireAuth() {
   const user = await getCurrentUser();
   if (!user) {
