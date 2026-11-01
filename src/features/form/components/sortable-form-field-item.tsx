@@ -1,8 +1,6 @@
 "use client";
 
-import { useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import { FormField, FormFieldType } from "@/types/domain";
+import { FormField } from "@/types/domain";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,11 +15,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  GripVertical,
   Trash2,
   FolderKanban,
   ArrowUp,
   ArrowDown,
+  ChevronUp,
+  ChevronDown,
+  Settings,
 } from "lucide-react";
 
 interface SortableFormFieldItemProps {
@@ -29,12 +29,17 @@ interface SortableFormFieldItemProps {
   index: number;
   fieldNumber?: number;
   isUnderSection?: boolean;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
+  onMoveUp?: (id: string) => void;
+  onMoveDown?: (id: string) => void;
   canMoveGroupUp?: boolean;
   canMoveGroupDown?: boolean;
   onMoveGroupUp?: (sectionId: string) => void;
   onMoveGroupDown?: (sectionId: string) => void;
   availableColumns?: string[];
   onUpdate: (id: string, updates: Partial<FormField>) => void;
+  onEditSection?: (item: FormField) => void;
   onDelete: (id: string) => void;
 }
 
@@ -43,94 +48,84 @@ export function SortableFormFieldItem({
   index,
   fieldNumber,
   isUnderSection = false,
+  canMoveUp = false,
+  canMoveDown = false,
+  onMoveUp,
+  onMoveDown,
   canMoveGroupUp = false,
   canMoveGroupDown = false,
   onMoveGroupUp,
   onMoveGroupDown,
   availableColumns = [],
   onUpdate,
+  onEditSection,
   onDelete,
 }: SortableFormFieldItemProps) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: item.id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    zIndex: isDragging ? 50 : "auto",
-    opacity: isDragging ? 0.75 : 1,
-  };
-
   const isSection = item.type === "section";
   const isExcelMapped = item.sourceType === "excel_column";
 
   if (isSection) {
     return (
-      <div ref={setNodeRef} style={style}>
-        <Card
-          className={`border-2 shadow-xs ${
-            isDragging
-              ? "ring-2 ring-primary border-primary bg-primary/10"
-              : "border-primary/30 bg-primary/5"
-          }`}
-        >
-          <CardContent className="p-3.5 space-y-2">
-            <div className="flex items-start justify-between gap-3">
-              {/* Drag Handle & Section Icon */}
-              <div className="flex items-center gap-2 pt-1">
-                <button
-                  type="button"
-                  {...attributes}
-                  {...listeners}
-                  className="cursor-grab active:cursor-grabbing p-1 rounded hover:bg-primary/10 text-primary/70 hover:text-primary touch-none"
-                  title="Tarik untuk memindahkan posisi pembatas section"
-                >
-                  <GripVertical className="w-4 h-4" />
-                </button>
-                <div className="w-6 h-6 rounded-md bg-primary text-primary-foreground flex items-center justify-center shrink-0">
-                  <FolderKanban className="w-3.5 h-3.5" />
+      <div className="transition-all duration-200 ease-in-out">
+        <Card className="border-2 shadow-xs border-primary/30 bg-primary/5 hover:border-primary/50 transition-all">
+          <CardContent className="p-3 space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              {/* Up/Down buttons, Icon & Section Title */}
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <div className="flex flex-col items-center justify-center -my-1 bg-background/80 border border-primary/20 rounded p-0.5">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    disabled={!canMoveUp}
+                    onClick={() => onMoveUp?.(item.id)}
+                    className="h-5 w-5 text-primary/70 hover:text-primary hover:bg-primary/10 disabled:opacity-25 active:scale-95 transition-transform"
+                    title="Pindahkan pembatas section ke atas"
+                  >
+                    <ChevronUp className="w-3.5 h-3.5" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    disabled={!canMoveDown}
+                    onClick={() => onMoveDown?.(item.id)}
+                    className="h-5 w-5 text-primary/70 hover:text-primary hover:bg-primary/10 disabled:opacity-25 active:scale-95 transition-transform"
+                    title="Pindahkan pembatas section ke bawah"
+                  >
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  </Button>
                 </div>
-                <Badge
-                  variant="secondary"
-                  className="text-[10px] font-semibold bg-primary/15 text-primary border border-primary/20"
-                >
-                  Section / Group
-                </Badge>
+
+                <div className="w-7 h-7 rounded-md bg-primary text-primary-foreground flex items-center justify-center shrink-0">
+                  <FolderKanban className="w-4 h-4" />
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-bold uppercase tracking-wide text-primary truncate max-w-[240px] sm:max-w-[340px]">
+                      {item.label || "Section Tanpa Judul"}
+                    </span>
+                    <Badge
+                      variant="secondary"
+                      className="text-[10px] px-1.5 py-0 font-semibold bg-primary/15 text-primary border border-primary/20"
+                    >
+                      Section / Group
+                    </Badge>
+                  </div>
+                  {item.description ? (
+                    <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                      {item.description}
+                    </p>
+                  ) : (
+                    <p className="text-[10px] text-muted-foreground/80 italic mt-0.5">
+                      Semua field di bawah pembatas ini masuk ke dalam grup ini
+                    </p>
+                  )}
+                </div>
               </div>
 
-              {/* Section Title & Description Inputs */}
-              <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-[11px] font-semibold text-primary">
-                    Judul Section / Group
-                  </Label>
-                  <Input
-                    value={item.label}
-                    placeholder="Contoh: Identitas & Profil Peserta"
-                    onChange={(e) => onUpdate(item.id, { label: e.target.value })}
-                    className="text-xs h-8 bg-background font-semibold"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[11px]">Deskripsi Grup (Opsional)</Label>
-                  <Input
-                    value={item.description || ""}
-                    placeholder="Keterangan singkat grup ini..."
-                    onChange={(e) =>
-                      onUpdate(item.id, { description: e.target.value })
-                    }
-                    className="text-xs h-8 bg-background"
-                  />
-                </div>
-              </div>
-
-              {/* Move Group Up/Down & Delete */}
+              {/* Move Group Up/Down & Edit & Delete */}
               <div className="flex items-center gap-1 shrink-0">
                 {(onMoveGroupUp || onMoveGroupDown) && (
                   <div className="flex items-center bg-background border border-border rounded-md p-0.5 mr-1">
@@ -140,7 +135,7 @@ export function SortableFormFieldItem({
                       size="icon"
                       disabled={!canMoveGroupUp}
                       onClick={() => onMoveGroupUp?.(item.id)}
-                      className="h-6 w-6 text-muted-foreground hover:text-primary disabled:opacity-30"
+                      className="h-6 w-6 text-muted-foreground hover:text-primary disabled:opacity-30 active:scale-95 transition-transform"
                       title="Pindahkan seluruh grup beserta isinya ke atas"
                     >
                       <ArrowUp className="w-3.5 h-3.5" />
@@ -151,7 +146,7 @@ export function SortableFormFieldItem({
                       size="icon"
                       disabled={!canMoveGroupDown}
                       onClick={() => onMoveGroupDown?.(item.id)}
-                      className="h-6 w-6 text-muted-foreground hover:text-primary disabled:opacity-30"
+                      className="h-6 w-6 text-muted-foreground hover:text-primary disabled:opacity-30 active:scale-95 transition-transform"
                       title="Pindahkan seluruh grup beserta isinya ke bawah"
                     >
                       <ArrowDown className="w-3.5 h-3.5" />
@@ -159,14 +154,27 @@ export function SortableFormFieldItem({
                   </div>
                 )}
 
+                {onEditSection && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onEditSection(item)}
+                    className="h-7 px-2 text-xs gap-1 bg-background"
+                  >
+                    <Settings className="w-3.5 h-3.5 text-muted-foreground" />
+                    <span className="hidden sm:inline">Edit Grup</span>
+                  </Button>
+                )}
+
                 <Button
                   size="icon"
                   variant="ghost"
                   onClick={() => onDelete(item.id)}
-                  className="text-rose-500 hover:text-rose-600 hover:bg-rose-50 shrink-0 h-8 w-8"
+                  className="text-rose-500 hover:text-rose-600 hover:bg-rose-50 shrink-0 h-7 w-7"
                   title="Hapus Pembatas Section"
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <Trash2 className="w-3.5 h-3.5" />
                 </Button>
               </div>
             </div>
@@ -178,30 +186,44 @@ export function SortableFormFieldItem({
 
   return (
     <div
-      ref={setNodeRef}
-      style={style}
-      className={isUnderSection ? "ml-4 sm:ml-6" : ""}
+      className={`transition-all duration-200 ease-in-out ${
+        isUnderSection ? "ml-4 sm:ml-6" : ""
+      }`}
     >
       <Card
-        className={`border shadow-xs ${
+        className={`border shadow-xs bg-card transition-all ${
           isUnderSection ? "border-l-4 border-l-primary/40" : ""
-        } ${
-          isDragging ? "ring-2 ring-primary border-primary bg-primary/5" : "bg-card"
         }`}
       >
         <CardContent className="p-4 space-y-3">
           <div className="flex items-start justify-between gap-3">
-            {/* Drag Handle */}
-            <div className="flex items-center gap-1.5 pt-1">
-              <button
-                type="button"
-                {...attributes}
-                {...listeners}
-                className="cursor-grab active:cursor-grabbing p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground touch-none"
-                title="Tarik untuk mengubah urutan field form"
-              >
-                <GripVertical className="w-4 h-4" />
-              </button>
+            {/* Up/Down buttons & numbering */}
+            <div className="flex items-center gap-2 pt-0.5">
+              <div className="flex flex-col items-center justify-center -my-1 bg-muted/40 border border-border/60 rounded p-0.5">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  disabled={!canMoveUp}
+                  onClick={() => onMoveUp?.(item.id)}
+                  className="h-5 w-5 text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-25 active:scale-95 transition-transform"
+                  title="Pindahkan urutan field ke atas"
+                >
+                  <ChevronUp className="w-3.5 h-3.5" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  disabled={!canMoveDown}
+                  onClick={() => onMoveDown?.(item.id)}
+                  className="h-5 w-5 text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-25 active:scale-95 transition-transform"
+                  title="Pindahkan urutan field ke bawah"
+                >
+                  <ChevronDown className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+
               <span className="w-5 h-5 rounded-full bg-muted flex items-center justify-center text-[11px] font-semibold text-muted-foreground">
                 {fieldNumber ?? index + 1}
               </span>
@@ -248,50 +270,46 @@ export function SortableFormFieldItem({
                 <Label className="text-[11px]">Tipe Input</Label>
                 <Select
                   value={item.type}
-                  onValueChange={(val) => {
-                    if (val) onUpdate(item.id, { type: val as FormFieldType });
-                  }}
+                  onValueChange={(val) => onUpdate(item.id, { type: val as any })}
                 >
                   <SelectTrigger className="w-full h-8 text-xs">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="section">Section Header (Grup)</SelectItem>
-                    <SelectItem value="text">Teks Singkat</SelectItem>
-                    <SelectItem value="image">Foto / Gambar (Avatar/URL)</SelectItem>
-                    <SelectItem value="number">Angka / Nominal</SelectItem>
-                    <SelectItem value="phone">Nomor Telepon</SelectItem>
-                    <SelectItem value="email">Email</SelectItem>
-                    <SelectItem value="textarea">Teks Panjang</SelectItem>
-                    <SelectItem value="date">Tanggal</SelectItem>
+                    <SelectItem value="text">Teks Pendek</SelectItem>
+                    <SelectItem value="textarea">Teks Panjang (Catatan)</SelectItem>
+                    <SelectItem value="number">Angka</SelectItem>
+                    <SelectItem value="checkbox">Centang (Ya/Tidak)</SelectItem>
                     <SelectItem value="select">Dropdown Pilihan</SelectItem>
-                    <SelectItem value="checkbox">Checkbox (Ya / Tidak)</SelectItem>
-                    <SelectItem value="file">File / Dokumen</SelectItem>
+                    <SelectItem value="date">Tanggal</SelectItem>
+                    <SelectItem value="drive_file">Upload Bukti Foto</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
-              {/* Kolom Excel Terkait (Jika Excel Column) */}
+              {/* Kolom Excel Mapping */}
               {isExcelMapped ? (
                 <div className="space-y-1">
-                  <Label className="text-[11px] font-semibold text-primary">Kolom Excel Terkait</Label>
+                  <Label className="text-[11px] text-emerald-600 font-semibold">
+                    Map ke Kolom Excel
+                  </Label>
                   {availableColumns.length > 0 ? (
                     <Select
                       value={item.excelColumn || ""}
-                      onValueChange={(val) => {
+                      onValueChange={(val) =>
                         onUpdate(item.id, {
-                          excelColumn: val || undefined,
-                          label: item.label || val || "",
-                        });
-                      }}
+                          excelColumn: val ?? undefined,
+                          label: item.label === "Kolom Profil Peserta" || !item.label ? (val ?? "") : item.label,
+                        })
+                      }
                     >
-                      <SelectTrigger className="w-full h-8 text-xs border-primary/50">
-                        <SelectValue placeholder="Pilih Kolom Excel..." />
+                      <SelectTrigger className="w-full h-8 text-xs border-emerald-500/40 text-emerald-700 bg-emerald-500/5">
+                        <SelectValue placeholder="Pilih Kolom..." />
                       </SelectTrigger>
                       <SelectContent>
-                        {availableColumns.map((col) => (
-                          <SelectItem key={col} value={col}>
-                            {col}
+                        {availableColumns.map((c) => (
+                          <SelectItem key={c} value={c}>
+                            {c}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -299,18 +317,18 @@ export function SortableFormFieldItem({
                   ) : (
                     <Input
                       value={item.excelColumn || ""}
-                      placeholder="Ketik nama kolom header..."
+                      placeholder="Nama kolom Excel..."
                       onChange={(e) => onUpdate(item.id, { excelColumn: e.target.value })}
-                      className="text-xs h-8 border-primary/50"
+                      className="text-xs h-8"
                     />
                   )}
                 </div>
               ) : (
                 <div className="space-y-1">
-                  <Label className="text-[11px]">Petunjuk Pengisian</Label>
+                  <Label className="text-[11px]">Keterangan / Panduan</Label>
                   <Input
                     value={item.description || ""}
-                    placeholder="Instruksi pengisian form..."
+                    placeholder="Petunjuk pengisian..."
                     onChange={(e) => onUpdate(item.id, { description: e.target.value })}
                     className="text-xs h-8"
                   />
@@ -318,67 +336,72 @@ export function SortableFormFieldItem({
               )}
             </div>
 
+            {/* Tombol Hapus */}
             <Button
               size="icon"
               variant="ghost"
               onClick={() => onDelete(item.id)}
-              className="text-rose-500 hover:text-rose-600 hover:bg-rose-50 shrink-0"
+              className="text-rose-500 hover:text-rose-600 hover:bg-rose-50 shrink-0 h-8 w-8"
               title="Hapus Field"
             >
               <Trash2 className="w-4 h-4" />
             </Button>
           </div>
 
-          {/* Toggles: Editable, Required & Evidence */}
-          <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-border/60 text-xs">
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id={`edit-${item.id}`}
-                checked={item.editable ?? true}
-                onCheckedChange={(c) => onUpdate(item.id, { editable: Boolean(c) })}
-              />
-              <Label htmlFor={`edit-${item.id}`} className="cursor-pointer font-medium text-foreground">
-                Dapat Diedit Saat Input Form
-              </Label>
-            </div>
-
+          {/* Opsi Tambahan / Checkbox Baris Bawah */}
+          <div className="flex items-center gap-6 pt-2 border-t text-xs flex-wrap">
             <div className="flex items-center space-x-2">
               <Checkbox
                 id={`req-${item.id}`}
                 checked={item.required}
-                onCheckedChange={(c) => onUpdate(item.id, { required: Boolean(c) })}
+                onCheckedChange={(checked) =>
+                  onUpdate(item.id, { required: !!checked })
+                }
               />
-              <Label htmlFor={`req-${item.id}`} className="cursor-pointer font-medium text-foreground">
+              <Label htmlFor={`req-${item.id}`} className="text-xs cursor-pointer">
                 Wajib Diisi (Required)
               </Label>
             </div>
 
-            {!isExcelMapped && (
+            {isExcelMapped && (
               <div className="flex items-center space-x-2">
                 <Checkbox
-                  id={`evi-${item.id}`}
-                  checked={item.evidenceEnabled}
-                  onCheckedChange={(c) =>
-                    onUpdate(item.id, { evidenceEnabled: Boolean(c) })
+                  id={`edit-${item.id}`}
+                  checked={item.editable}
+                  onCheckedChange={(checked) =>
+                    onUpdate(item.id, { editable: !!checked })
                   }
                 />
-                <Label htmlFor={`evi-${item.id}`} className="cursor-pointer font-medium">
-                  Lampiran Dokumen Tambahan
+                <Label htmlFor={`edit-${item.id}`} className="text-xs cursor-pointer">
+                  Dapat Diubah oleh Petugas
                 </Label>
               </div>
             )}
 
-            {!isExcelMapped && item.evidenceEnabled && (
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id={`ev-${item.id}`}
+                checked={item.evidenceEnabled}
+                onCheckedChange={(checked) =>
+                  onUpdate(item.id, { evidenceEnabled: !!checked })
+                }
+              />
+              <Label htmlFor={`ev-${item.id}`} className="text-xs cursor-pointer font-medium text-amber-700 dark:text-amber-400">
+                Sertakan Bukti Foto / Dokumen
+              </Label>
+            </div>
+
+            {item.evidenceEnabled && (
               <div className="flex items-center space-x-2">
                 <Checkbox
-                  id={`evireq-${item.id}`}
+                  id={`ev-req-${item.id}`}
                   checked={item.evidenceRequired}
-                  onCheckedChange={(c) =>
-                    onUpdate(item.id, { evidenceRequired: Boolean(c) })
+                  onCheckedChange={(checked) =>
+                    onUpdate(item.id, { evidenceRequired: !!checked })
                   }
                 />
-                <Label htmlFor={`evireq-${item.id}`} className="cursor-pointer text-rose-600 font-medium">
-                  Lampiran Wajib Diunggah
+                <Label htmlFor={`ev-req-${item.id}`} className="text-xs cursor-pointer text-amber-800 dark:text-amber-300">
+                  Foto Wajib Diambil
                 </Label>
               </div>
             )}
@@ -388,6 +411,3 @@ export function SortableFormFieldItem({
     </div>
   );
 }
-
-// Backward compatibility export
-export const SortableChecklistItem = SortableFormFieldItem;

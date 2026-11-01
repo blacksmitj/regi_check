@@ -1,12 +1,9 @@
 "use client";
 
-import { useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import { FormField } from "@/types/domain";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  GripVertical,
   Settings,
   Trash2,
   FileSpreadsheet,
@@ -15,6 +12,8 @@ import {
   FolderKanban,
   ArrowUp,
   ArrowDown,
+  ChevronUp,
+  ChevronDown,
   CornerDownRight,
   FolderInput,
   Check,
@@ -40,6 +39,10 @@ interface FormFieldRowItemProps {
   fieldNumber?: number;
   isUnderSection?: boolean;
   sectionChildrenCount?: number;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
+  onMoveUp?: (id: string) => void;
+  onMoveDown?: (id: string) => void;
   canMoveGroupUp?: boolean;
   canMoveGroupDown?: boolean;
   availableSections?: SectionOption[];
@@ -58,6 +61,10 @@ export function FormFieldRowItem({
   fieldNumber,
   isUnderSection = false,
   sectionChildrenCount = 0,
+  canMoveUp = false,
+  canMoveDown = false,
+  onMoveUp,
+  onMoveDown,
   canMoveGroupUp = false,
   canMoveGroupDown = false,
   availableSections = [],
@@ -68,47 +75,40 @@ export function FormFieldRowItem({
   onEdit,
   onDelete,
 }: FormFieldRowItemProps) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: item.id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    zIndex: isDragging ? 50 : "auto",
-    opacity: isDragging ? 0.6 : 1,
-  };
-
   const isSection = item.type === "section";
   const isExcel = item.sourceType === "excel_column";
 
   if (isSection) {
     return (
       <div
-        ref={setNodeRef}
-        style={style}
-        className={`group flex items-center justify-between gap-3 p-3 rounded-lg border-2 transition-all ${
-          isDragging
-            ? "border-primary ring-2 ring-primary/20 shadow-md bg-primary/10"
-            : "border-primary/30 bg-primary/5 hover:border-primary/50"
-        }`}
+        className="group flex items-center justify-between gap-3 p-3 rounded-lg border-2 border-primary/30 bg-primary/5 hover:border-primary/50 transition-all duration-200 ease-in-out"
       >
-        {/* Kiri: Drag Handle + Icon Section + Judul & Info */}
+        {/* Kiri: Tombol Atas/Bawah + Icon Section + Judul & Info */}
         <div className="flex items-center gap-3 min-w-0 flex-1">
-          <button
-            type="button"
-            {...attributes}
-            {...listeners}
-            className="cursor-grab active:cursor-grabbing p-1 -ml-1 text-primary/70 hover:text-primary touch-none rounded"
-            title="Tarik untuk memindahkan posisi pembatas section saja"
-          >
-            <GripVertical className="w-4 h-4" />
-          </button>
+          <div className="flex flex-col items-center justify-center -my-1 -ml-1 bg-background/60 border border-primary/20 rounded p-0.5">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              disabled={!canMoveUp}
+              onClick={() => onMoveUp?.(item.id)}
+              className="h-5 w-5 text-primary/70 hover:text-primary hover:bg-primary/10 disabled:opacity-25 active:scale-95 transition-transform"
+              title="Pindahkan pembatas section ke atas"
+            >
+              <ChevronUp className="w-3.5 h-3.5" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              disabled={!canMoveDown}
+              onClick={() => onMoveDown?.(item.id)}
+              className="h-5 w-5 text-primary/70 hover:text-primary hover:bg-primary/10 disabled:opacity-25 active:scale-95 transition-transform"
+              title="Pindahkan pembatas section ke bawah"
+            >
+              <ChevronDown className="w-3.5 h-3.5" />
+            </Button>
+          </div>
 
           <div className="w-7 h-7 rounded-md bg-primary text-primary-foreground flex items-center justify-center shrink-0 shadow-xs">
             <FolderKanban className="w-4 h-4" />
@@ -150,7 +150,7 @@ export function FormFieldRowItem({
                 size="icon"
                 disabled={!canMoveGroupUp}
                 onClick={() => onMoveGroupUp?.(item.id)}
-                className="h-6 w-6 text-muted-foreground hover:text-primary disabled:opacity-30"
+                className="h-6 w-6 text-muted-foreground hover:text-primary disabled:opacity-30 active:scale-95 transition-transform"
                 title="Pindahkan seluruh grup beserta isinya ke atas"
               >
                 <ArrowUp className="w-3.5 h-3.5" />
@@ -161,7 +161,7 @@ export function FormFieldRowItem({
                 size="icon"
                 disabled={!canMoveGroupDown}
                 onClick={() => onMoveGroupDown?.(item.id)}
-                className="h-6 w-6 text-muted-foreground hover:text-primary disabled:opacity-30"
+                className="h-6 w-6 text-muted-foreground hover:text-primary disabled:opacity-30 active:scale-95 transition-transform"
                 title="Pindahkan seluruh grup beserta isinya ke bawah"
               >
                 <ArrowDown className="w-3.5 h-3.5" />
@@ -197,27 +197,36 @@ export function FormFieldRowItem({
 
   return (
     <div
-      ref={setNodeRef}
-      style={style}
-      className={`group flex items-center justify-between gap-3 p-3 bg-card border rounded-lg transition-all ${
+      className={`group flex items-center justify-between gap-3 p-3 bg-card border rounded-lg transition-all duration-200 ease-in-out hover:border-border/80 hover:shadow-xs ${
         isUnderSection ? "ml-4 sm:ml-6 border-l-4 border-l-primary/40" : ""
-      } ${
-        isDragging
-          ? "border-primary ring-2 ring-primary/20 shadow-md bg-accent/20"
-          : "hover:border-border/80 hover:shadow-xs"
       }`}
     >
-      {/* Kiri: Drag Handle + Nomor Urut + Nama/Tipe */}
+      {/* Kiri: Tombol Atas/Bawah + Nomor Urut + Nama/Tipe */}
       <div className="flex items-center gap-2.5 min-w-0 flex-1">
-        <button
-          type="button"
-          {...attributes}
-          {...listeners}
-          className="cursor-grab active:cursor-grabbing p-1 -ml-1 text-muted-foreground hover:text-foreground touch-none rounded"
-          title="Tarik untuk memindahkan urutan"
-        >
-          <GripVertical className="w-4 h-4" />
-        </button>
+        <div className="flex flex-col items-center justify-center -my-1 -ml-1 bg-muted/40 border border-border/60 rounded p-0.5">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            disabled={!canMoveUp}
+            onClick={() => onMoveUp?.(item.id)}
+            className="h-5 w-5 text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-25 active:scale-95 transition-transform"
+            title="Pindahkan urutan field ke atas"
+          >
+            <ChevronUp className="w-3.5 h-3.5" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            disabled={!canMoveDown}
+            onClick={() => onMoveDown?.(item.id)}
+            className="h-5 w-5 text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-25 active:scale-95 transition-transform"
+            title="Pindahkan urutan field ke bawah"
+          >
+            <ChevronDown className="w-3.5 h-3.5" />
+          </Button>
+        </div>
 
         {isUnderSection && (
           <CornerDownRight className="w-3.5 h-3.5 text-primary/50 shrink-0 -ml-1 hidden sm:block" />

@@ -21,22 +21,8 @@ import {
   Layers,
   FolderPlus,
 } from "lucide-react";
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  DragEndEvent,
-} from "@dnd-kit/core";
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
 import { SortableFormFieldItem } from "@/features/form/components/sortable-form-field-item";
+import { SectionDialog } from "@/features/form/components/section-dialog";
 import { useAuthStore } from "@/stores/auth-store";
 
 interface TemplateEditorProps {
@@ -70,6 +56,10 @@ export function TemplateEditor({ templateId }: TemplateEditorProps) {
   const [items, setItems] = useState<FormField[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isSavedNotice, setIsSavedNotice] = useState(false);
+
+  // Section Modal State
+  const [sectionDialogOpen, setSectionDialogOpen] = useState(false);
+  const [editingSection, setEditingSection] = useState<FormField | null>(null);
 
   useEffect(() => {
     if (initialTemplate) {
@@ -143,17 +133,6 @@ export function TemplateEditor({ templateId }: TemplateEditorProps) {
     }
   }, [initialTemplate, isEditing]);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 5,
-      },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  );
-
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!name.trim()) {
@@ -195,27 +174,58 @@ export function TemplateEditor({ templateId }: TemplateEditorProps) {
     },
   });
 
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (over && active.id !== over.id) {
-      setItems((prevItems) => {
-        const oldIndex = prevItems.findIndex((it) => it.id === active.id);
-        const newIndex = prevItems.findIndex((it) => it.id === over.id);
-        const reordered = arrayMove(prevItems, oldIndex, newIndex);
-        return reordered.map((it, idx) => ({ ...it, order: idx + 1 }));
-      });
-    }
+  const handleMoveItem = (id: string, direction: "up" | "down") => {
+    setItems((prev) => {
+      const index = prev.findIndex((it) => it.id === id);
+      if (index === -1) return prev;
+      const targetIndex = direction === "up" ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= prev.length) return prev;
+
+      const updated = [...prev];
+      const [moved] = updated.splice(index, 1);
+      updated.splice(targetIndex, 0, moved);
+      return updated.map((it, idx) => ({ ...it, order: idx + 1 }));
+    });
   };
 
-  const handleAddItem = (
-    source: "custom_field" | "excel_column" | "checklist_input" | "section" = "custom_field"
-  ) => {
-    if (source === "section") {
-      const sectionCount = items.filter((it) => it.type === "section").length + 1;
+  const handleOpenCreateSectionModal = () => {
+    const sectionCount = items.filter((it) => it.type === "section").length + 1;
+    const tempSection: FormField = {
+      id: "",
+      label: `Bagian ${sectionCount}: Judul Grup Baru`,
+      description: "",
+      type: "section",
+      sourceType: "custom_field",
+      required: false,
+      editable: false,
+      evidenceEnabled: false,
+      evidenceRequired: false,
+      order: items.length + 1,
+      active: true,
+    };
+    setEditingSection(tempSection);
+    setSectionDialogOpen(true);
+  };
+
+  const handleOpenEditSectionModal = (section: FormField) => {
+    setEditingSection(section);
+    setSectionDialogOpen(true);
+  };
+
+  const handleSaveSectionModal = (data: { label: string; description?: string }) => {
+    if (editingSection && editingSection.id) {
+      setItems((prev) =>
+        prev.map((it) =>
+          it.id === editingSection.id
+            ? { ...it, label: data.label, description: data.description }
+            : it
+        )
+      );
+    } else {
       const newSection: FormField = {
         id: `section-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`,
-        label: `Bagian ${sectionCount}: Judul Grup Baru`,
-        description: "",
+        label: data.label,
+        description: data.description,
         type: "section",
         sourceType: "custom_field",
         required: false,
@@ -225,7 +235,15 @@ export function TemplateEditor({ templateId }: TemplateEditorProps) {
         order: items.length + 1,
         active: true,
       };
-      setItems([...items, newSection]);
+      setItems((prev) => [...prev, newSection]);
+    }
+  };
+
+  const handleAddItem = (
+    source: "custom_field" | "excel_column" | "checklist_input" | "section" = "custom_field"
+  ) => {
+    if (source === "section") {
+      handleOpenCreateSectionModal();
       return;
     }
 
@@ -266,8 +284,10 @@ export function TemplateEditor({ templateId }: TemplateEditorProps) {
       const targetIdx = direction === "up" ? blockIdx - 1 : blockIdx + 1;
       if (targetIdx < 0 || targetIdx >= blocks.length) return prev;
 
-      const swappedBlocks = arrayMove(blocks, blockIdx, targetIdx);
-      return swappedBlocks.flat().map((it, idx) => ({ ...it, order: idx + 1 }));
+      const updatedBlocks = [...blocks];
+      const [movedBlock] = updatedBlocks.splice(blockIdx, 1);
+      updatedBlocks.splice(targetIdx, 0, movedBlock);
+      return updatedBlocks.flat().map((it, idx) => ({ ...it, order: idx + 1 }));
     });
   };
 
@@ -540,36 +560,37 @@ export function TemplateEditor({ templateId }: TemplateEditorProps) {
         <div className="bg-primary/5 border border-primary/20 p-3 rounded-lg flex items-start gap-2.5 text-xs text-foreground">
           <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-primary" />
           <div>
-            <span className="font-semibold">Section &amp; Drag-and-Drop: </span>
-            Tambahkan <strong>Section / Group</strong> untuk mengelompokkan field secara berurutan, atau gunakan grip untuk mengatur posisi.
+            <span className="font-semibold">Urutan &amp; Section Group: </span>
+            Tambahkan <strong>Section / Group</strong> untuk mengelompokkan field secara berurutan, atau gunakan tombol panah atas/bawah untuk mengatur posisi setiap item.
           </div>
         </div>
 
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext items={items.map((it) => it.id)} strategy={verticalListSortingStrategy}>
-            <div className="space-y-3">
-              {items.map((item, idx) => {
-                const info = itemLayoutMeta.get(item.id);
-                return (
-                  <SortableFormFieldItem
-                    key={item.id}
-                    item={item}
-                    index={idx}
-                    fieldNumber={info?.fieldNumber}
-                    isUnderSection={info?.isUnderSection}
-                    canMoveGroupUp={info?.canMoveGroupUp}
-                    canMoveGroupDown={info?.canMoveGroupDown}
-                    onMoveGroupUp={(secId) => handleMoveSectionGroup(secId, "up")}
-                    onMoveGroupDown={(secId) => handleMoveSectionGroup(secId, "down")}
-                    availableColumns={sampleColumns}
-                    onUpdate={handleUpdateItem}
-                    onDelete={handleDeleteItem}
-                  />
-                );
-              })}
-            </div>
-          </SortableContext>
-        </DndContext>
+        <div className="space-y-3">
+          {items.map((item, idx) => {
+            const info = itemLayoutMeta.get(item.id);
+            return (
+              <SortableFormFieldItem
+                key={item.id}
+                item={item}
+                index={idx}
+                fieldNumber={info?.fieldNumber}
+                isUnderSection={info?.isUnderSection}
+                canMoveUp={idx > 0}
+                canMoveDown={idx < items.length - 1}
+                onMoveUp={(id) => handleMoveItem(id, "up")}
+                onMoveDown={(id) => handleMoveItem(id, "down")}
+                canMoveGroupUp={info?.canMoveGroupUp}
+                canMoveGroupDown={info?.canMoveGroupDown}
+                onMoveGroupUp={(secId) => handleMoveSectionGroup(secId, "up")}
+                onMoveGroupDown={(secId) => handleMoveSectionGroup(secId, "down")}
+                availableColumns={sampleColumns}
+                onUpdate={handleUpdateItem}
+                onEditSection={handleOpenEditSectionModal}
+                onDelete={handleDeleteItem}
+              />
+            );
+          })}
+        </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
           <Button
@@ -598,6 +619,15 @@ export function TemplateEditor({ templateId }: TemplateEditorProps) {
           </Button>
         </div>
       </div>
+
+      {/* Modal Dialog Modular untuk Section / Group */}
+      <SectionDialog
+        open={sectionDialogOpen}
+        onOpenChange={setSectionDialogOpen}
+        section={editingSection}
+        onSave={handleSaveSectionModal}
+        onDelete={handleDeleteItem}
+      />
     </div>
   );
 }

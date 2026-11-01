@@ -10,10 +10,8 @@ import {
   Plus,
   Check,
   FileSpreadsheet,
-  PlusSquare,
   Sparkles,
   Layers,
-  FolderPlus,
 } from "lucide-react";
 
 interface AvailableColumnItem {
@@ -26,7 +24,7 @@ interface ColumnSourceListProps {
   availableColumns: AvailableColumnItem[];
   onAddColumn: (columnName: string) => void;
   onAddAllColumns: () => void;
-  onCreateCustomField: () => void;
+  onCreateCustomField?: () => void;
   onCreateSection?: () => void;
 }
 
@@ -34,8 +32,6 @@ export function ColumnSourceList({
   availableColumns,
   onAddColumn,
   onAddAllColumns,
-  onCreateCustomField,
-  onCreateSection,
 }: ColumnSourceListProps) {
   const [search, setSearch] = useState("");
 
@@ -75,43 +71,18 @@ export function ColumnSourceList({
         </div>
 
         {/* Quick action buttons */}
-        <div className="space-y-1.5 pt-1">
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={onAddAllColumns}
-              disabled={unusedCount === 0}
-              className="flex-1 text-[11px] h-7 gap-1"
-            >
-              <Sparkles className="w-3 h-3 text-emerald-600" />
-              Tambah Semua ({unusedCount})
-            </Button>
-
-            <Button
-              type="button"
-              size="sm"
-              onClick={onCreateCustomField}
-              className="text-[11px] h-7 gap-1"
-            >
-              <PlusSquare className="w-3 h-3" />
-              Field Baru
-            </Button>
-          </div>
-
-          {onCreateSection && (
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              onClick={onCreateSection}
-              className="w-full text-[11px] h-7 gap-1.5 bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20"
-            >
-              <FolderPlus className="w-3.5 h-3.5" />
-              + Section / Group Baru
-            </Button>
-          )}
+        <div className="pt-1">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={onAddAllColumns}
+            disabled={unusedCount === 0}
+            className="w-full text-[11px] h-7 gap-1"
+          >
+            <Sparkles className="w-3 h-3 text-emerald-600" />
+            Tambah Semua ({unusedCount})
+          </Button>
         </div>
       </CardHeader>
 

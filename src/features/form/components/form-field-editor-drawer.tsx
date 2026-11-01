@@ -230,29 +230,30 @@ function DrawerInner({
             />
           </div>
 
-          {/* Tipe Input */}
-          <div className="space-y-1.5">
-            <Label className="text-xs font-semibold">Tipe Elemen Form</Label>
-            <Select value={formData.type} onValueChange={(val) => handleTypeChange(val as FormFieldType)}>
-              <SelectTrigger className="w-full h-8 text-xs font-medium">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="section">Section Header / Judul Grup Pembatas</SelectItem>
-                <SelectItem value="checkbox">Checkbox (Centang / Ya-Tidak)</SelectItem>
-                <SelectItem value="text">Teks Pendek (Text)</SelectItem>
-                <SelectItem value="textarea">Teks Panjang (Textarea)</SelectItem>
-                <SelectItem value="number">Angka (Number)</SelectItem>
-                <SelectItem value="date">Tanggal (Date)</SelectItem>
-                <SelectItem value="select">Dropdown Pilihan (Select)</SelectItem>
-                <SelectItem value="radio">Radio Buttons (Pilihan Tunggal)</SelectItem>
-                <SelectItem value="email">Email</SelectItem>
-                <SelectItem value="phone">Nomor Telepon / WhatsApp</SelectItem>
-                <SelectItem value="image">Upload Foto (Image)</SelectItem>
-                <SelectItem value="file">Upload Berkas / PDF (File)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          {/* Tipe Input (Hanya untuk field biasa, bukan section/group) */}
+          {!isSection && (
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Tipe Elemen Form</Label>
+              <Select value={formData.type} onValueChange={(val) => handleTypeChange(val as FormFieldType)}>
+                <SelectTrigger className="w-full h-8 text-xs font-medium">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="checkbox">Checkbox (Centang / Ya-Tidak)</SelectItem>
+                  <SelectItem value="text">Teks Pendek (Text)</SelectItem>
+                  <SelectItem value="textarea">Teks Panjang (Textarea)</SelectItem>
+                  <SelectItem value="number">Angka (Number)</SelectItem>
+                  <SelectItem value="date">Tanggal (Date)</SelectItem>
+                  <SelectItem value="select">Dropdown Pilihan (Select)</SelectItem>
+                  <SelectItem value="radio">Radio Buttons (Pilihan Tunggal)</SelectItem>
+                  <SelectItem value="email">Email</SelectItem>
+                  <SelectItem value="phone">Nomor Telepon / WhatsApp</SelectItem>
+                  <SelectItem value="image">Upload Foto (Image)</SelectItem>
+                  <SelectItem value="file">Upload Berkas / PDF (File)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {/* Options jika tipe select atau radio */}
           {!isSection && (formData.type === "select" || formData.type === "radio") && (
