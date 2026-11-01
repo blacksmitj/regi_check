@@ -16,6 +16,9 @@ export interface Workspace {
   endDate: string;
   status: "active" | "archived";
   templateId?: string;
+  uniqueKeyColumn?: string;
+  nameColumn?: string;
+  photoColumn?: string;
   createdAt: string;
   updatedAt: string;
 }

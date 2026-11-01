@@ -1,4 +1,3 @@
-import { mockDB } from "@/mocks/db";
 import {
   User,
   Workspace,
@@ -12,93 +11,131 @@ import {
   AuditLog,
 } from "@/types/domain";
 import { calculateParticipantStatus } from "../domain/status-engine";
+import {
+  saveOfflineDraft,
+  syncOfflineDraftsToBackend,
+} from "@/lib/storage/indexed-db";
 
-// Helper to simulate network latency
-const delay = (ms = 150) => new Promise((resolve) => setTimeout(resolve, ms));
+// Helper for fetch requests
+async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(url, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(init?.headers || {}),
+    },
+  });
+
+  if (!res.ok) {
+    const errorBody = await res.json().catch(() => ({}));
+    throw new Error(errorBody.error || `HTTP error ${res.status}: ${res.statusText}`);
+  }
+
+  return res.json();
+}
 
 export const api = {
   // --- Auth ---
   async getCurrentUser(): Promise<User | null> {
-    await delay();
-    return mockDB.getCurrentUser();
+    try {
+      const data = await fetchJson<{ user: User | null }>("/api/auth/me");
+      return data.user;
+    } catch {
+      return null;
+    }
   },
 
   async loginAs(email: string): Promise<User> {
-    await delay();
-    const allUsers = mockDB.getUsers();
-    let user = allUsers.find((u) => u.email === email);
+    // For local convenience / officer login
+    const officers = await this.getOfficers();
+    const officer = officers.find((o) => o.email === email && o.active);
 
-    if (!user) {
-      // Check officer list
-      const officer = mockDB.getOfficers().find((o) => o.email === email && o.active);
-      if (officer) {
-        user = {
-          id: officer.id,
-          name: officer.name,
-          email: officer.email,
-          role: "officer",
-        };
-      }
+    if (officer) {
+      return {
+        id: officer.id,
+        name: officer.name,
+        email: officer.email,
+        role: "officer",
+      };
     }
 
-    if (!user) {
-      // Throw access denied error for unauthorized emails
-      throw new Error("ACCESS_DENIED: Email tidak terdaftar dalam sistem.");
+    const currentUser = await this.getCurrentUser();
+    if (currentUser && currentUser.email === email) {
+      return currentUser;
     }
 
-    mockDB.setCurrentUserEmail(user.email);
-    return user;
+    throw new Error("ACCESS_DENIED: Email tidak terdaftar dalam sistem.");
   },
 
   async logout(): Promise<void> {
-    await delay();
-    mockDB.setCurrentUserEmail(null);
+    try {
+      await fetch("/api/auth/sign-out", { method: "POST" });
+    } catch (e) {
+      console.warn("Logout request failed:", e);
+    }
   },
 
   // --- Workspaces ---
   async getWorkspaces(): Promise<Workspace[]> {
-    await delay();
-    return mockDB.getWorkspaces();
+    return fetchJson<Workspace[]>("/api/workspaces");
   },
 
   async getWorkspace(id: string): Promise<Workspace> {
-    await delay();
-    const ws = mockDB.getWorkspace(id);
-    if (!ws) throw new Error("Workspace tidak ditemukan");
-    return ws;
+    return fetchJson<Workspace>(`/api/workspaces/${id}`);
   },
 
   async createWorkspace(
-    input: Omit<Workspace, "id" | "createdAt" | "updatedAt" | "status"> & { templateId?: string }
+    input: Omit<Workspace, "id" | "createdAt" | "updatedAt" | "status"> & {
+      templateId?: string;
+    }
   ): Promise<Workspace> {
-    await delay();
-    return mockDB.createWorkspace(input);
+    return fetchJson<Workspace>("/api/workspaces", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
   },
 
-  async updateWorkspace(id: string, updates: Partial<Workspace>): Promise<Workspace> {
-    await delay();
-    return mockDB.updateWorkspace(id, updates);
+  async updateWorkspace(
+    id: string,
+    updates: Partial<Workspace>
+  ): Promise<Workspace> {
+    return fetchJson<Workspace>(`/api/workspaces/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(updates),
+    });
   },
 
   async deleteWorkspace(id: string): Promise<void> {
-    await delay();
-    mockDB.deleteWorkspace(id);
+    await fetchJson<{ success: boolean }>(`/api/workspaces/${id}`, {
+      method: "DELETE",
+    });
   },
 
   async cleanWorkspaceResponses(id: string): Promise<void> {
-    await delay();
-    mockDB.cleanWorkspaceResponses(id);
+    await fetchJson<{ success: boolean }>(
+      `/api/workspaces/${id}/clean-responses`,
+      {
+        method: "POST",
+      }
+    );
   },
 
   // --- Form fields per Workspace ---
   async getWorkspaceForm(workspaceId: string): Promise<FormField[]> {
-    await delay();
-    return mockDB.getWorkspaceForm(workspaceId);
+    return fetchJson<FormField[]>(`/api/workspaces/${workspaceId}/form-fields`);
   },
 
-  async saveWorkspaceForm(workspaceId: string, items: FormField[]): Promise<FormField[]> {
-    await delay();
-    return mockDB.saveWorkspaceForm(workspaceId, items);
+  async saveWorkspaceForm(
+    workspaceId: string,
+    items: FormField[]
+  ): Promise<FormField[]> {
+    return fetchJson<FormField[]>(
+      `/api/workspaces/${workspaceId}/form-fields`,
+      {
+        method: "PUT",
+        body: JSON.stringify(items),
+      }
+    );
   },
 
   // Legacy alias
@@ -106,75 +143,125 @@ export const api = {
     return this.getWorkspaceForm(workspaceId);
   },
 
-  async saveWorkspaceChecklist(workspaceId: string, items: ChecklistItem[]): Promise<ChecklistItem[]> {
+  async saveWorkspaceChecklist(
+    workspaceId: string,
+    items: ChecklistItem[]
+  ): Promise<ChecklistItem[]> {
     return this.saveWorkspaceForm(workspaceId, items);
   },
 
   // --- Templates ---
   async getTemplates(): Promise<ChecklistTemplate[]> {
-    await delay();
-    return mockDB.getTemplates();
+    return fetchJson<ChecklistTemplate[]>("/api/templates");
   },
 
   async getTemplate(id: string): Promise<ChecklistTemplate> {
-    await delay();
-    const tpl = mockDB.getTemplate(id);
-    if (!tpl) throw new Error("Template tidak ditemukan");
-    return tpl;
+    return fetchJson<ChecklistTemplate>(`/api/templates/${id}`);
   },
 
   async saveTemplate(template: ChecklistTemplate): Promise<ChecklistTemplate> {
-    await delay();
-    return mockDB.saveTemplate(template);
+    if (template.id && !template.id.startsWith("temp_")) {
+      try {
+        return await fetchJson<ChecklistTemplate>(
+          `/api/templates/${template.id}`,
+          {
+            method: "PUT",
+            body: JSON.stringify(template),
+          }
+        );
+      } catch {
+        // If not found, create new
+      }
+    }
+
+    return fetchJson<ChecklistTemplate>("/api/templates", {
+      method: "POST",
+      body: JSON.stringify(template),
+    });
   },
 
   async deleteTemplate(id: string): Promise<void> {
-    await delay();
-    mockDB.deleteTemplate(id);
+    await fetchJson<{ success: boolean }>(`/api/templates/${id}`, {
+      method: "DELETE",
+    });
   },
 
   // --- Participants ---
   async getParticipants(workspaceId: string): Promise<Participant[]> {
-    await delay();
-    return mockDB.getParticipants(workspaceId);
+    return fetchJson<Participant[]>(`/api/workspaces/${workspaceId}/participants`);
   },
 
-  async getParticipant(id: string): Promise<Participant> {
-    await delay();
-    const p = mockDB.getParticipant(id);
-    if (!p) throw new Error("Peserta tidak ditemukan");
-    return p;
+  async getParticipant(id: string, workspaceId?: string): Promise<Participant> {
+    if (workspaceId) {
+      return fetchJson<Participant>(
+        `/api/workspaces/${workspaceId}/participants/${id}`
+      );
+    }
+    // Fallback: search participant directly
+    const workspaces = await this.getWorkspaces();
+    for (const ws of workspaces) {
+      try {
+        const p = await fetchJson<Participant>(
+          `/api/workspaces/${ws.id}/participants/${id}`
+        );
+        if (p) return p;
+      } catch {
+        // continue
+      }
+    }
+    throw new Error("Peserta tidak ditemukan");
   },
 
-  async updateParticipant(id: string, updates: Partial<Participant>): Promise<Participant> {
-    await delay();
-    const p = mockDB.getParticipant(id);
-    if (!p) throw new Error("Peserta tidak ditemukan");
-
-    // If data updated, recompute completion status automatically
-    if (updates.data && !updates.status) {
-      const formFields = mockDB.getWorkspaceForm(p.workspaceId);
-      updates.status = calculateParticipantStatus(formFields, updates.data);
+  async updateParticipant(
+    id: string,
+    updates: Partial<Participant>,
+    workspaceId?: string
+  ): Promise<Participant> {
+    let wsId = workspaceId;
+    if (!wsId) {
+      const p = await this.getParticipant(id);
+      wsId = p.workspaceId;
     }
 
-    return mockDB.updateParticipant(id, updates);
+    return fetchJson<Participant>(
+      `/api/workspaces/${wsId}/participants/${id}`,
+      {
+        method: "PUT",
+        body: JSON.stringify(updates),
+      }
+    );
   },
 
   async updateParticipantFormData(
     participantId: string,
     fieldKey: string,
-    value: unknown
+    value: unknown,
+    workspaceId?: string
   ): Promise<Participant> {
-    await delay();
-    const p = mockDB.getParticipant(participantId);
-    if (!p) throw new Error("Peserta tidak ditemukan");
-    const updatedData = { ...p.data, [fieldKey]: value };
-    const formFields = mockDB.getWorkspaceForm(p.workspaceId);
+    let wsId = workspaceId;
+    let existingData: Record<string, unknown> = {};
+
+    if (!wsId) {
+      const p = await this.getParticipant(participantId);
+      wsId = p.workspaceId;
+      existingData = p.data;
+    } else {
+      const p = await this.getParticipant(participantId, wsId);
+      existingData = p.data;
+    }
+
+    const updatedData = { ...existingData, [fieldKey]: value };
+    const formFields = await this.getWorkspaceForm(wsId);
     const newStatus = calculateParticipantStatus(formFields, updatedData);
-    return mockDB.updateParticipant(participantId, {
-      data: updatedData,
-      status: newStatus,
-    });
+
+    return this.updateParticipant(
+      participantId,
+      {
+        data: updatedData,
+        status: newStatus,
+      },
+      wsId
+    );
   },
 
   async importParticipants(
@@ -191,88 +278,143 @@ export const api = {
     updatedCount: number;
     skippedCount: number;
   }> {
-    await delay(350);
-
-    const formatted = participants.map((p) => ({
-      action: p.action || "create",
-      data: p.data,
-      existingId: p.existingId,
-    }));
-
-    const result = mockDB.importParticipantsWithDeduplication(workspaceId, formatted);
-    return {
-      total: participants.length,
-      importedCount: result.createdCount + result.updatedCount,
-      createdCount: result.createdCount,
-      updatedCount: result.updatedCount,
-      skippedCount: result.skippedCount,
-    };
+    return fetchJson<{
+      total: number;
+      importedCount: number;
+      createdCount: number;
+      updatedCount: number;
+      skippedCount: number;
+    }>(`/api/workspaces/${workspaceId}/participants`, {
+      method: "POST",
+      body: JSON.stringify({ participants }),
+    });
   },
 
   // --- Checklist Responses ---
-  async getResponses(participantId: string): Promise<ChecklistResponse[]> {
-    await delay();
-    return mockDB.getResponses(participantId);
+  async getResponses(
+    participantId: string,
+    workspaceId?: string
+  ): Promise<ChecklistResponse[]> {
+    let wsId = workspaceId;
+    if (!wsId) {
+      const p = await this.getParticipant(participantId);
+      wsId = p.workspaceId;
+    }
+
+    return fetchJson<ChecklistResponse[]>(
+      `/api/workspaces/${wsId}/participants/${participantId}/responses`
+    );
   },
 
-  async saveResponse(response: Omit<ChecklistResponse, "id"> & { id?: string }): Promise<{
+  async saveResponse(
+    response: Omit<ChecklistResponse, "id"> & { id?: string },
+    workspaceId?: string
+  ): Promise<{
     response: ChecklistResponse;
     newParticipantStatus: string;
   }> {
-    await delay();
-    const saved = mockDB.saveResponse(response);
-
-    // Recompute participant status
-    const participant = mockDB.getParticipant(response.participantId);
-    if (participant) {
-      const checklist = mockDB.getWorkspaceChecklist(participant.workspaceId);
-      const allResponses = mockDB.getResponses(participant.id);
-      const newStatus = calculateParticipantStatus(checklist, allResponses);
-      if (participant.status !== newStatus) {
-        mockDB.updateParticipant(participant.id, { status: newStatus });
-      }
-
-      // Add audit log
-      const currentUser = mockDB.getCurrentUser();
-      const item = checklist.find((i) => i.id === response.checklistItemId);
-      mockDB.addAuditLog({
-        workspaceId: participant.workspaceId,
-        officerName: currentUser?.name || "Petugas",
-        officerEmail: currentUser?.email || "petugas@regicheck.id",
-        participantId: participant.id,
-        participantName: String(participant.data["Nama Lengkap"] || "Peserta"),
-        checklistItemId: response.checklistItemId,
-        checklistItemLabel: item?.label || response.checklistItemId,
-        action: response.status === "rejected" ? "Menolak Item" : "Memperbarui Checklist",
-        newValue: response.notes ? `${response.status}: ${response.notes}` : response.status,
-      });
-
-      return { response: saved, newParticipantStatus: newStatus };
+    let wsId = workspaceId;
+    if (!wsId) {
+      const p = await this.getParticipant(response.participantId);
+      wsId = p.workspaceId;
     }
 
-    return { response: saved, newParticipantStatus: "incomplete" };
+    // Check offline mode
+    if (typeof window !== "undefined" && !navigator.onLine) {
+      // Save to IndexedDB draft
+      await saveOfflineDraft({
+        workspaceId: wsId,
+        participantId: response.participantId,
+        updatedAt: new Date().toISOString(),
+        syncStatus: "pending",
+        userEmail: response.updatedBy || "",
+        version: 1,
+        responses: {
+          [response.checklistItemId]: {
+            value: response.value,
+            status: response.status,
+            notes: response.notes,
+            evidence: response.evidence,
+          },
+        },
+      });
+
+      return {
+        response: {
+          id: response.id || `offline_${Date.now()}`,
+          participantId: response.participantId,
+          checklistItemId: response.checklistItemId,
+          value: response.value,
+          status: response.status,
+          notes: response.notes,
+          evidence: response.evidence,
+          updatedBy: response.updatedBy,
+          updatedAt: new Date().toISOString(),
+        },
+        newParticipantStatus: "incomplete",
+      };
+    }
+
+    // Online: send to PostgreSQL backend API
+    const result = await fetchJson<{
+      response: ChecklistResponse;
+      newParticipantStatus: string;
+    }>(
+      `/api/workspaces/${wsId}/participants/${response.participantId}/responses`,
+      {
+        method: "POST",
+        body: JSON.stringify(response),
+      }
+    );
+
+    // Sync any pending offline drafts in the background
+    syncOfflineDraftsToBackend().catch(console.error);
+
+    return result;
   },
 
   // --- Officers ---
   async getOfficers(): Promise<Officer[]> {
-    await delay();
-    return mockDB.getOfficers();
+    return fetchJson<Officer[]>("/api/officers");
   },
 
   async saveOfficers(officers: Officer[]): Promise<void> {
-    await delay();
-    mockDB.saveOfficers(officers);
+    await fetchJson<{ success: boolean }>("/api/officers", {
+      method: "POST",
+      body: JSON.stringify(officers),
+    });
   },
 
   // --- Audit Logs ---
   async getAuditLogs(workspaceId?: string): Promise<AuditLog[]> {
-    await delay();
-    return mockDB.getAuditLogs(workspaceId);
+    const url = workspaceId
+      ? `/api/audit-logs?workspaceId=${encodeURIComponent(workspaceId)}`
+      : "/api/audit-logs";
+    return fetchJson<AuditLog[]>(url);
+  },
+
+  // --- Upload Evidence File ---
+  async uploadEvidence(file: File): Promise<{
+    id: string;
+    name: string;
+    size: number;
+    type: string;
+    url: string;
+  }> {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch("/api/storage/upload", {
+      method: "POST",
+      body: formData,
+    });
+    if (!res.ok) {
+      throw new Error("Gagal mengunggah file bukti");
+    }
+    return res.json();
   },
 
   // --- Reset for Demo ---
   resetMockDB() {
-    mockDB.reset();
+    // No-op for real database
   },
 };
-

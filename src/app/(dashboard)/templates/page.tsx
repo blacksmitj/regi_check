@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
-  Plus,
   Edit3,
   Copy,
   Trash2,
@@ -20,6 +19,7 @@ import {
   Calendar,
   AlertCircle,
   Loader2,
+  Info,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -115,16 +115,27 @@ export default function TemplatesPage() {
             </Badge>
           </div>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Kelola template form standar yang dapat disalin sebagai konfigurasi awal saat membuat workspace kegiatan baru.
+            Daftar master template konfigurasi form checklist. Anda dapat menduplikasi & mengedit template yang sudah ada, atau menyimpan susunan form langsung dari Workspace kegiatan.
           </p>
         </div>
 
-        <Link href="/templates/new">
-          <Button size="sm" className="gap-1.5 text-xs">
-            <Plus className="w-4 h-4" />
-            Buat Template Baru
+        <Link href="/workspaces">
+          <Button variant="outline" size="sm" className="gap-1.5 text-xs">
+            <Layers className="w-4 h-4" />
+            Buka Workspace
           </Button>
         </Link>
+      </div>
+
+      {/* Info Banner */}
+      <div className="flex items-start gap-3 p-3.5 rounded-lg border border-primary/20 bg-primary/5 text-xs text-muted-foreground leading-relaxed">
+        <Info className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+        <div>
+          <span className="font-semibold text-foreground">Ingin membuat template baru?</span> Buat susunan form di dalam suatu{" "}
+          <strong className="text-foreground">Workspace</strong> berdasarkan kolom Excel/CSV berkas peserta Anda, lalu klik tombol{" "}
+          <strong className="text-foreground">"Simpan sebagai Template"</strong> pada halaman Atur Form. Atau gunakan tombol{" "}
+          <strong className="text-foreground">"Duplikat"</strong> pada salah satu template di bawah ini untuk disesuaikan.
+        </div>
       </div>
 
       {/* Search Bar */}

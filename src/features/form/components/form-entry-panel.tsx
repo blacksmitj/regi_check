@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import {
   Participant,
+  Workspace,
   FormField,
   SyncStatus,
   EvidenceFile,
@@ -47,6 +48,7 @@ import {
 
 interface FormEntryPanelProps {
   participant: Participant;
+  workspace?: Workspace;
   formFields: FormField[];
   // backward compat props
   checklistItems?: FormField[];
@@ -70,6 +72,7 @@ interface FormSectionGroup {
 
 export function FormEntryPanel({
   participant,
+  workspace,
   formFields: directFormFields,
   checklistItems,
   onUpdateParticipantData,
@@ -120,17 +123,33 @@ export function FormEntryPanel({
     setFormData(participant.data || {});
   }, [participant.id, participant.data]);
 
+  // Dynamic Name resolution based on workspace settings or fallback
+  const resolvedNameKey =
+    (workspace?.nameColumn && formData[workspace.nameColumn] !== undefined)
+      ? workspace.nameColumn
+      : Object.keys(formData).find((k) => /nama/i.test(k)) || "Nama";
   const participantName = String(
-    formData["Nama Lengkap"] || formData["Nama"] || "Peserta"
+    formData[resolvedNameKey] || formData["Nama Lengkap"] || formData["Nama"] || "Peserta"
   );
 
-  // Identify main photo
+  // Dynamic Unique Key resolution based on workspace settings or fallback
+  const resolvedUniqueKeyLabel =
+    workspace?.uniqueKeyColumn ||
+    Object.keys(formData).find((k) => /nik|ktp|id|nomor|nim/i.test(k)) ||
+    "ID Peserta";
+  const uniqueKeyValue = formData[resolvedUniqueKeyLabel] !== undefined
+    ? String(formData[resolvedUniqueKeyLabel])
+    : String(formData["NIK"] || "-");
+
+  // Identify main photo based on workspace settings, formFields, or auto-detect
   const photoField = fields.find(
     (f) => f.type === "image" && f.sourceType === "excel_column"
   );
   const mainPhotoKey =
-    photoField?.excelColumn ||
-    Object.keys(formData).find((k) => /foto|photo|avatar|gambar/i.test(k));
+    (workspace?.photoColumn && workspace.photoColumn !== "none" && formData[workspace.photoColumn] !== undefined)
+      ? workspace.photoColumn
+      : photoField?.excelColumn ||
+        Object.keys(formData).find((k) => /foto|photo|avatar|gambar/i.test(k));
   const rawMainPhotoUrl = mainPhotoKey ? String(formData[mainPhotoKey] || "") : "";
   const mainPhotoUrl = rawMainPhotoUrl
     ? isGoogleDriveUrl(rawMainPhotoUrl)
@@ -263,7 +282,7 @@ export function FormEntryPanel({
     };
   }, [activeItems]);
 
-  // Render a single field card
+  // Render a single field item
   const renderFieldCard = (field: FormField, displayIndex: number) => {
     const fieldKey = field.excelColumn || field.id;
     const currentValue =
@@ -274,62 +293,48 @@ export function FormEntryPanel({
           : formData[field.label];
 
     const isEditable = field.editable ?? true;
-    const isExcelSource = field.sourceType === "excel_column";
 
     return (
-      <Card
+      <div
         key={field.id}
-        className="border shadow-xs hover:border-primary/40 transition-colors bg-card"
+        className="space-y-1.5 p-2 rounded-md hover:bg-muted/40 transition-colors"
       >
-        <CardContent className="p-4 sm:p-5 space-y-3">
-          {/* Field Header */}
-          <div className="flex items-start justify-between gap-2">
-            <div className="space-y-0.5">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="w-5 h-5 rounded-full bg-muted flex items-center justify-center text-[10px] font-bold text-muted-foreground">
-                  {displayIndex}
-                </span>
-                <Label
-                  htmlFor={`form-input-${field.id}`}
-                  className="text-sm font-semibold text-foreground cursor-pointer"
-                >
-                  {field.label}
-                  {field.required && (
-                    <span className="text-rose-500 ml-1 font-bold">*</span>
-                  )}
-                </Label>
-
-                {isExcelSource ? (
-                  <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-blue-500/10 text-blue-600 border border-blue-500/20">
-                    Kolom Excel: {field.excelColumn || field.label}
-                  </span>
-                ) : (
-                  <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-muted text-muted-foreground">
-                    Field Tambahan
-                  </span>
-                )}
-
-                {!isEditable && (
-                  <span
-                    className="text-[10px] text-muted-foreground flex items-center gap-1"
-                    title="Field Read-Only"
-                  >
-                    <Lock className="w-3 h-3" />
-                    Terkunci
-                  </span>
-                )}
-              </div>
-
-              {field.description && (
-                <p className="text-xs text-muted-foreground pl-7">
-                  {field.description}
-                </p>
+        {/* Field Header */}
+        <div className="flex items-center justify-between gap-1.5">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="w-4 h-4 rounded-full bg-muted flex items-center justify-center text-[9px] font-bold text-muted-foreground shrink-0">
+              {displayIndex}
+            </span>
+            <Label
+              htmlFor={`form-input-${field.id}`}
+              className="text-xs font-semibold text-foreground cursor-pointer truncate"
+              title={field.label}
+            >
+              {field.label}
+              {field.required && (
+                <span className="text-rose-500 ml-0.5 font-bold">*</span>
               )}
-            </div>
+            </Label>
           </div>
 
-          {/* Field Input Control */}
-          <div className="pl-7 pt-1">
+          {!isEditable && (
+            <span
+              className="text-[9px] text-muted-foreground flex items-center gap-0.5 shrink-0"
+              title="Field Read-Only"
+            >
+              <Lock className="w-2.5 h-2.5" />
+            </span>
+          )}
+        </div>
+
+        {field.description && (
+          <p className="text-[11px] text-muted-foreground pl-5.5 line-clamp-2">
+            {field.description}
+          </p>
+        )}
+
+        {/* Field Input Control */}
+        <div className="pl-5.5 pt-0.5">
             {/* 1. Tipe Gambar / Foto */}
             {field.type === "image" &&
               (() => {
@@ -715,8 +720,7 @@ export function FormEntryPanel({
                 );
               })()}
           </div>
-        </CardContent>
-      </Card>
+      </div>
     );
   };
 
@@ -771,7 +775,7 @@ export function FormEntryPanel({
               <StatusBadge status={participant.status} />
             </div>
             <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
-              <span>NIK: {String(formData["NIK"] || "-")}</span>
+              <span>{resolvedUniqueKeyLabel}: <span className="font-medium text-foreground">{uniqueKeyValue}</span></span>
               <span>•</span>
               <span>
                 HP: {String(formData["Nomor HP"] || formData["HP"] || "-")}
@@ -808,7 +812,7 @@ export function FormEntryPanel({
       </div>
 
       {/* Main Form Fields Container */}
-      <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4">
+      <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-5 space-y-3">
         {activeInputFields.length === 0 ? (
           <div className="p-8 text-center text-muted-foreground border border-dashed rounded-lg">
             <AlertCircle className="w-8 h-8 mx-auto mb-2 text-muted-foreground/60" />
@@ -820,13 +824,13 @@ export function FormEntryPanel({
             </p>
           </div>
         ) : !hasAnyExplicitSection ? (
-          <div className="space-y-4 max-w-4xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-5xl mx-auto">
             {activeInputFields.map((field, idx) =>
               renderFieldCard(field, idx + 1)
             )}
           </div>
         ) : (
-          <div className="space-y-5 max-w-4xl mx-auto">
+          <div className="space-y-4 max-w-5xl mx-auto">
             {sectionGroups.map((group, groupIdx) => {
               if (!group.isExplicitSection && group.fields.length === 0) {
                 return null;
@@ -849,34 +853,34 @@ export function FormEntryPanel({
                   <button
                     type="button"
                     onClick={() => toggleSectionCollapse(group.id)}
-                    className="w-full flex items-center justify-between gap-3 px-4 py-3.5 bg-muted/40 hover:bg-muted/70 transition-colors text-left border-b border-border/60"
+                    className="w-full flex items-center justify-between gap-3 px-3.5 py-2.5 bg-muted/40 hover:bg-muted/70 transition-colors text-left border-b border-border/60"
                   >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                        <FolderKanban className="w-4 h-4" />
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-6 h-6 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                        <FolderKanban className="w-3.5 h-3.5" />
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-[11px] font-bold uppercase tracking-wider text-primary">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-primary">
                             Bagian {groupIdx + 1}
                           </span>
                           <span className="text-muted-foreground/50">•</span>
-                          <h3 className="text-sm font-bold text-foreground truncate">
+                          <h3 className="text-xs sm:text-sm font-bold text-foreground truncate">
                             {group.title}
                           </h3>
                         </div>
                         {group.description && (
-                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+                          <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-1">
                             {group.description}
                           </p>
                         )}
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2.5 shrink-0">
+                    <div className="flex items-center gap-2 shrink-0">
                       <Badge
                         variant={isAllGroupFilled ? "default" : "secondary"}
-                        className={`text-[11px] font-semibold px-2 py-0.5 ${
+                        className={`text-[10px] font-semibold px-2 py-0.5 ${
                           isAllGroupFilled
                             ? "bg-emerald-600 hover:bg-emerald-600 text-white"
                             : ""
@@ -884,11 +888,11 @@ export function FormEntryPanel({
                       >
                         {groupFilledCount}/{groupTotalCount} Terisi
                       </Badge>
-                      <div className="w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground">
+                      <div className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground">
                         {isCollapsed ? (
-                          <ChevronRight className="w-4 h-4" />
+                          <ChevronRight className="w-3.5 h-3.5" />
                         ) : (
-                          <ChevronDown className="w-4 h-4" />
+                          <ChevronDown className="w-3.5 h-3.5" />
                         )}
                       </div>
                     </div>
@@ -896,15 +900,17 @@ export function FormEntryPanel({
 
                   {/* Section Body */}
                   {!isCollapsed && (
-                    <div className="p-3.5 sm:p-4 space-y-3.5 bg-background/50">
+                    <div className="p-3 sm:p-4 bg-background/50">
                       {group.fields.length === 0 ? (
                         <p className="text-xs text-muted-foreground italic py-3 text-center">
                           Belum ada field di dalam grup section ini.
                         </p>
                       ) : (
-                        group.fields.map(({ field, globalNumber }) =>
-                          renderFieldCard(field, globalNumber)
-                        )
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2">
+                          {group.fields.map(({ field, globalNumber }) =>
+                            renderFieldCard(field, globalNumber)
+                          )}
+                        </div>
                       )}
                     </div>
                   )}

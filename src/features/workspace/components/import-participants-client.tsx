@@ -50,6 +50,8 @@ import {
   KeyRound,
   ShieldAlert,
   TableProperties,
+  User,
+  Image as ImageIcon,
 } from "lucide-react";
 import { Participant } from "@/types/domain";
 
@@ -87,6 +89,8 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
   const [rawRows, setRawRows] = useState<Record<string, unknown>[]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
   const [selectedKeyField, setSelectedKeyField] = useState<string>("");
+  const [selectedNameField, setSelectedNameField] = useState<string>("");
+  const [selectedPhotoField, setSelectedPhotoField] = useState<string>("none");
 
   // File format & CSV delimiter
   const [fileName, setFileName] = useState<string>("");
@@ -215,11 +219,13 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
       const cols = Object.keys(data[0]);
       setHeaders(cols);
 
-      // Smart auto-detect key field
-      let detectedKey = cols[0];
+      // Smart auto-detect key field (NIK, ID, etc.)
+      let detectedKey = workspace?.uniqueKeyColumn && cols.includes(workspace.uniqueKeyColumn)
+        ? workspace.uniqueKeyColumn
+        : cols[0];
       const foundKey = cols.find((c) => {
         const l = c.toLowerCase();
-        return l.includes("nik") || l.includes("ktp") || l.includes("id") || l.includes("nomor");
+        return l.includes("nik") || l.includes("ktp") || l.includes("id") || l.includes("nomor") || l.includes("nim");
       });
       if (foundKey) {
         detectedKey = foundKey;
@@ -227,8 +233,35 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
         const emailKey = cols.find((c) => c.toLowerCase().includes("email"));
         if (emailKey) detectedKey = emailKey;
       }
-
       setSelectedKeyField(detectedKey);
+
+      // Smart auto-detect name field
+      let detectedName = workspace?.nameColumn && cols.includes(workspace.nameColumn)
+        ? workspace.nameColumn
+        : "";
+      if (!detectedName) {
+        const foundName = cols.find((c) => {
+          const l = c.toLowerCase();
+          return l.includes("nama") || l.includes("name");
+        });
+        detectedName = foundName || cols[0];
+      }
+      setSelectedNameField(detectedName);
+
+      // Smart auto-detect photo field
+      let detectedPhoto = workspace?.photoColumn && (cols.includes(workspace.photoColumn) || workspace.photoColumn === "none")
+        ? workspace.photoColumn
+        : "none";
+      if (detectedPhoto === "none") {
+        const foundPhoto = cols.find((c) => {
+          const l = c.toLowerCase();
+          return l.includes("foto") || l.includes("photo") || l.includes("avatar") || l.includes("gambar");
+        });
+        if (foundPhoto) {
+          detectedPhoto = foundPhoto;
+        }
+      }
+      setSelectedPhotoField(detectedPhoto);
     }
   };
 
@@ -350,6 +383,14 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
   // Import mutation
   const importMutation = useMutation({
     mutationFn: async () => {
+      // 1. Simpan konfigurasi pemetaan kolom identitas ke Workspace
+      await api.updateWorkspace(workspaceId, {
+        uniqueKeyColumn: selectedKeyField,
+        nameColumn: selectedNameField,
+        photoColumn: selectedPhotoField !== "none" ? selectedPhotoField : undefined,
+      });
+
+      // 2. Import peserta
       const payload = analyzedRows.map((r) => ({
         data: r.data,
         action: r.action,
@@ -373,6 +414,8 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
     setRawRows([]);
     setHeaders([]);
     setSelectedKeyField("");
+    setSelectedNameField("");
+    setSelectedPhotoField("none");
     setFileName("");
     setCsvContent(null);
     setAnalyzedRows([]);
@@ -594,31 +637,104 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
                 </CardHeader>
 
                 <CardContent className="space-y-6 pt-5">
-                  {/* Selector: Unique Identifier Key */}
-                  <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <KeyRound className="w-4 h-4 text-primary" />
-                        <span className="text-xs font-bold text-foreground">
-                          Kunci Identitas Unik (Identifier Duplikasi)
-                        </span>
+                  {/* Selectors: Unique Identifier, Name, & Photo Mapping */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {/* 1. Kunci Unik */}
+                    <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 flex flex-col justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5">
+                          <KeyRound className="w-4 h-4 text-primary" />
+                          <span className="text-xs font-bold text-foreground">
+                            Kolom ID Unik <span className="text-rose-500">*</span>
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground leading-snug">
+                          Acuan identifier unik (misal: NIK, NIM, ID Peserta) untuk cek duplikasi & pencarian.
+                        </p>
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        Pilih nama kolom header yang menjadi acuan untuk mendeteksi apakah data pada berkas sudah ada sebelumnya atau ganda.
-                      </p>
-                    </div>
 
-                    <div className="flex items-center gap-2 min-w-[220px]">
                       <Select
                         value={selectedKeyField}
                         onValueChange={(val) => {
                           if (val) setSelectedKeyField(val);
                         }}
                       >
-                        <SelectTrigger className="h-9 text-xs bg-background">
-                          <SelectValue placeholder="Pilih Kolom Kunci" />
+                        <SelectTrigger className="h-8 text-xs bg-background">
+                          <SelectValue placeholder="Pilih Kolom ID" />
                         </SelectTrigger>
                         <SelectContent>
+                          {headers.map((col) => (
+                            <SelectItem key={col} value={col} className="text-xs">
+                              {col}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* 2. Nama Peserta */}
+                    <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 flex flex-col justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5">
+                          <User className="w-4 h-4 text-primary" />
+                          <span className="text-xs font-bold text-foreground">
+                            Kolom Nama <span className="text-rose-500">*</span>
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground leading-snug">
+                          Kolom nama lengkap untuk ditampilkan di header kartu profil form registrasi.
+                        </p>
+                      </div>
+
+                      <Select
+                        value={selectedNameField}
+                        onValueChange={(val) => {
+                          if (val) setSelectedNameField(val);
+                        }}
+                      >
+                        <SelectTrigger className="h-8 text-xs bg-background">
+                          <SelectValue placeholder="Pilih Kolom Nama" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {headers.map((col) => (
+                            <SelectItem key={col} value={col} className="text-xs">
+                              {col}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* 3. Foto Peserta */}
+                    <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 flex flex-col justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5">
+                          <ImageIcon className="w-4 h-4 text-primary" />
+                          <span className="text-xs font-bold text-foreground">
+                            Kolom Foto / Avatar
+                          </span>
+                          <Badge variant="outline" className="text-[9px] px-1 py-0 text-muted-foreground">
+                            Opsional
+                          </Badge>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground leading-snug">
+                          Link foto / Google Drive untuk foto avatar profil peserta di form registrasi.
+                        </p>
+                      </div>
+
+                      <Select
+                        value={selectedPhotoField}
+                        onValueChange={(val) => {
+                          if (val) setSelectedPhotoField(val);
+                        }}
+                      >
+                        <SelectTrigger className="h-8 text-xs bg-background">
+                          <SelectValue placeholder="Pilih Kolom Foto" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none" className="text-xs italic text-muted-foreground">
+                            -- Tidak Ada Foto / Lewati --
+                          </SelectItem>
                           {headers.map((col) => (
                             <SelectItem key={col} value={col} className="text-xs">
                               {col}
@@ -652,7 +768,17 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
                                   <span>{col}</span>
                                   {col === selectedKeyField && (
                                     <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-primary/15 text-primary border-0">
-                                      Kunci
+                                      ID Unik
+                                    </Badge>
+                                  )}
+                                  {col === selectedNameField && (
+                                    <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-blue-500/15 text-blue-600 border-0">
+                                      Nama
+                                    </Badge>
+                                  )}
+                                  {col === selectedPhotoField && (
+                                    <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-amber-500/15 text-amber-600 border-0">
+                                      Foto
                                     </Badge>
                                   )}
                                 </div>
@@ -696,7 +822,7 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
                   <Button
                     size="sm"
                     onClick={runDuplicationCheck}
-                    disabled={!selectedKeyField}
+                    disabled={!selectedKeyField || !selectedNameField}
                     className="text-xs gap-1.5"
                   >
                     Lanjut ke Cek Duplikasi

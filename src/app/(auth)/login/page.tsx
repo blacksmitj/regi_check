@@ -1,107 +1,73 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { useAuthStore } from "@/stores/auth-store";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { AlertCircle, LogIn, Loader2, Mail, ShieldCheck } from "lucide-react";
+import { signIn } from "@/lib/auth-client";
 
 export default function LoginPage() {
-  const router = useRouter();
-  const { loginAs, isLoading, error } = useAuthStore();
-  const [email, setEmail] = useState("admin@regicheck.id");
-  const [authError, setAuthError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email.trim()) {
-      setAuthError("Silakan masukkan alamat email.");
-      return;
-    }
-
-    setAuthError(null);
+  const handleGoogleSignIn = async () => {
     try {
-      await loginAs(email.trim());
-      const currentUser = useAuthStore.getState().user;
-      if (currentUser?.role === "officer") {
-        router.push("/workspaces");
-      } else {
-        router.push("/dashboard");
-      }
-    } catch (err: unknown) {
-      if (err instanceof Error && err.message.includes("ACCESS_DENIED")) {
-        router.push("/access-denied");
-      } else {
-        setAuthError(err instanceof Error ? err.message : "Terjadi kesalahan saat masuk");
-      }
+      setLoading(true);
+      setError(null);
+      await signIn.social({
+        provider: "google",
+        callbackURL: "/",
+      });
+    } catch (err) {
+      console.error(err);
+      setError("Failed to initialize Google Sign In. Please try again.");
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-muted/40 p-4">
-      <Card className="w-full max-w-md shadow-lg border-border">
-        <CardHeader className="text-center space-y-2">
-          <div className="mx-auto w-12 h-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold text-xl">
-            RC
+    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+      <div className="w-full max-w-sm space-y-6 rounded-2xl border border-border bg-card p-8 shadow-sm">
+        <div className="space-y-2 text-center">
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+            Sign In
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Continue with your Google account to access Regi Check
+          </p>
+        </div>
+
+        {error && (
+          <div className="rounded-lg bg-destructive/15 p-3 text-sm text-destructive">
+            {error}
           </div>
-          <CardTitle className="text-2xl font-bold tracking-tight">Registration Form</CardTitle>
-          <CardDescription>
-            Aplikasi pengelolaan form dan registrasi peserta kegiatan.
-          </CardDescription>
-        </CardHeader>
+        )}
 
-        <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-4">
-            {(error || authError) && (
-              <div className="p-3 text-sm rounded-lg bg-destructive/10 text-destructive flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{error || authError}</span>
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <label htmlFor="email" className="text-sm font-medium text-foreground flex items-center gap-1.5">
-                <Mail className="w-4 h-4 text-muted-foreground" />
-                Email Pengguna
-              </label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="nama@email.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="w-full"
-              />
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1">
-                <ShieldCheck className="w-3.5 h-3.5 text-primary shrink-0" />
-                <span>Default Admin: <strong className="text-foreground">admin@regicheck.id</strong></span>
-              </div>
-            </div>
-          </CardContent>
-
-          <CardFooter className="flex flex-col gap-3 pt-2">
-            <Button
-              type="submit"
-              disabled={isLoading}
-              className="w-full gap-2 py-5 text-sm font-medium"
-            >
-              {isLoading ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <LogIn className="w-4 h-4" />
-              )}
-              Masuk ke Aplikasi
-            </Button>
-
-            <p className="text-xs text-center text-muted-foreground">
-              Masukkan email Admin atau email Petugas yang telah ditugaskan pada workspace.
-            </p>
-          </CardFooter>
-        </form>
-      </Card>
+        <button
+          onClick={handleGoogleSignIn}
+          disabled={loading}
+          type="button"
+          className="inline-flex w-full items-center justify-center gap-3 rounded-lg border border-input bg-background px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <svg className="h-4 w-4" viewBox="0 0 24 24">
+            <path
+              d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+              fill="#4285F4"
+            />
+            <path
+              d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+              fill="#34A853"
+            />
+            <path
+              d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+              fill="#FBBC05"
+            />
+            <path
+              d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+              fill="#EA4335"
+            />
+          </svg>
+          {loading ? "Redirecting..." : "Continue with Google"}
+        </button>
+      </div>
     </div>
   );
 }
+

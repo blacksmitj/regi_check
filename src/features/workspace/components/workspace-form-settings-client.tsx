@@ -16,7 +16,20 @@ import {
   Plus,
   FolderPlus,
   PlusCircle,
+  BookmarkPlus,
+  Loader2,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -60,6 +73,12 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
   const [sectionDialogOpen, setSectionDialogOpen] = useState(false);
   const [editingSection, setEditingSection] = useState<FormField | null>(null);
   const [pendingSectionInsertIndex, setPendingSectionInsertIndex] = useState<number | undefined>(undefined);
+
+  // Save as Template Modal State
+  const [saveTemplateDialogOpen, setSaveTemplateDialogOpen] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const [templateDesc, setTemplateDesc] = useState("");
+  const [templateSavedSuccess, setTemplateSavedSuccess] = useState(false);
 
   useEffect(() => {
     if (initialItems.length > 0) {
@@ -110,6 +129,37 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
       setTimeout(() => setIsSavedNotice(false), 3000);
     },
   });
+
+  const saveAsTemplateMutation = useMutation({
+    mutationFn: async () => {
+      const now = new Date().toISOString();
+      const newTemplate = {
+        id: `tpl-${Date.now().toString(36)}`,
+        name: templateName.trim() || `Template dari ${workspace?.name || "Workspace"}`,
+        description: templateDesc.trim() || undefined,
+        sampleColumns: availableColumnNames,
+        items: items.map((it) => ({
+          ...it,
+          id: `item-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+        })),
+        createdAt: now,
+        updatedAt: now,
+      };
+      return api.saveTemplate(newTemplate);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["templates"] });
+      setSaveTemplateDialogOpen(false);
+      setTemplateSavedSuccess(true);
+      setTimeout(() => setTemplateSavedSuccess(false), 4000);
+    },
+  });
+
+  const handleOpenSaveTemplateModal = () => {
+    setTemplateName(workspace?.name ? `Template ${workspace.name}` : "Template Form Baru");
+    setTemplateDesc(workspace?.description ? `Dibuat dari workspace: ${workspace.name}` : "");
+    setSaveTemplateDialogOpen(true);
+  };
 
   // Move single item up or down
   const handleMoveItem = (id: string, direction: "up" | "down") => {
@@ -450,62 +500,81 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
   const totalSectionsCount = items.filter((it) => it.type === "section").length;
 
   return (
-    <div className="flex-1 p-6 max-w-7xl mx-auto w-full space-y-5">
-      {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-4">
-        <div className="flex items-center gap-3">
-          <Link href={`/workspaces/${workspaceId}`}>
-            <Button variant="ghost" size="icon">
-              <ArrowLeft className="w-4 h-4" />
-            </Button>
-          </Link>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold tracking-tight">Atur Form Workspace</h1>
-              <span className="text-xs px-2 py-0.5 rounded bg-primary/10 text-primary font-medium">
-                Form Builder
-              </span>
+    <div className="flex-1 flex flex-col min-h-0 pb-20">
+      <div className="p-6 max-w-7xl mx-auto w-full space-y-5 flex-1">
+        {/* Top Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-4">
+          <div className="flex items-center gap-3">
+            <Link href={`/workspaces/${workspaceId}`}>
+              <Button variant="ghost" size="icon">
+                <ArrowLeft className="w-4 h-4" />
+              </Button>
+            </Link>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl font-bold tracking-tight">Atur Form Workspace</h1>
+                <span className="text-xs px-2 py-0.5 rounded bg-primary/10 text-primary font-medium">
+                  Form Builder
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Workspace: <span className="font-semibold text-foreground">{workspace?.name}</span>
+              </p>
             </div>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Workspace: <span className="font-semibold text-foreground">{workspace?.name}</span>
-            </p>
+          </div>
+
+          <div className="hidden sm:flex items-center gap-2">
+            {templateSavedSuccess && (
+              <span className="text-xs font-medium text-emerald-600 flex items-center gap-1 animate-in fade-in">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Template Berhasil Dibuat!
+              </span>
+            )}
+            {isSavedNotice && (
+              <span className="text-xs font-medium text-emerald-600 flex items-center gap-1 animate-in fade-in">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Perubahan Form Tersimpan!
+              </span>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleOpenSaveTemplateModal}
+              disabled={items.length === 0}
+              className="gap-1.5 text-xs shadow-xs"
+              title="Simpan konfigurasi form saat ini sebagai Master Template"
+            >
+              <BookmarkPlus className="w-3.5 h-3.5 text-primary" />
+              Simpan Jadi Template
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => saveMutation.mutate(items)}
+              disabled={saveMutation.isPending}
+              className="gap-1.5 text-xs shadow-xs"
+            >
+              <Save className="w-3.5 h-3.5" />
+              {saveMutation.isPending ? "Menyimpan..." : "Simpan Form"}
+            </Button>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {isSavedNotice && (
-            <span className="text-xs font-medium text-emerald-600 flex items-center gap-1 animate-in fade-in">
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              Perubahan Form Tersimpan!
-            </span>
-          )}
-          <Button
-            size="sm"
-            onClick={() => saveMutation.mutate(items)}
-            disabled={saveMutation.isPending}
-            className="gap-1.5 text-xs shadow-xs"
-          >
-            <Save className="w-3.5 h-3.5" />
-            {saveMutation.isPending ? "Menyimpan..." : "Simpan Form"}
-          </Button>
-        </div>
-      </div>
+        {/* Two-Column Grid: Kiri List Kolom, Kanan Urutan & Setting */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* Kiri: List Kolom Sumber (4 kolom grid) */}
+          <div className="lg:col-span-4 sticky top-6">
+            <ColumnSourceList
+              availableColumns={availableColumnsList}
+              onAddColumn={handleAddColumn}
+              onAddAllColumns={handleAddAllColumns}
+              onCreateCustomField={handleCreateCustomField}
+              onCreateSection={() => handleOpenCreateSectionModal()}
+            />
+          </div>
 
-      {/* Two-Column Grid: Kiri List Kolom, Kanan Urutan & Setting */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Kiri: List Kolom Sumber (4 kolom grid) */}
-        <div className="lg:col-span-4 sticky top-6">
-          <ColumnSourceList
-            availableColumns={availableColumnsList}
-            onAddColumn={handleAddColumn}
-            onAddAllColumns={handleAddAllColumns}
-            onCreateCustomField={handleCreateCustomField}
-            onCreateSection={() => handleOpenCreateSectionModal()}
-          />
-        </div>
-
-        {/* Kanan: Urutan & Pengaturan Form (8 kolom grid) */}
-        <div className="lg:col-span-8 space-y-4">
+          {/* Kanan: Urutan & Pengaturan Form (8 kolom grid) */}
+          <div className="lg:col-span-8 space-y-4">
           <Card className="border shadow-xs bg-card">
             <CardHeader className="p-4 pb-3 border-b border-border/70 flex flex-row items-center justify-between gap-2">
               <div>
@@ -606,6 +675,66 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
           </Card>
         </div>
       </div>
+      </div>
+
+      {/* Fixed Bottom Bar Full Width */}
+      <div className="fixed bottom-0 inset-x-0 z-30 w-full border-t border-border bg-background/95 backdrop-blur-md shadow-lg">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <Link href={`/workspaces/${workspaceId}`}>
+              <Button variant="ghost" size="sm" className="gap-1.5 text-xs text-muted-foreground hover:text-foreground">
+                <ArrowLeft className="w-4 h-4" />
+                <span className="hidden sm:inline">Kembali</span>
+              </Button>
+            </Link>
+
+            <div className="h-4 w-px bg-border hidden sm:block" />
+
+            <div className="text-xs text-muted-foreground hidden md:block">
+              Total: <span className="font-semibold text-foreground">{totalFieldsCount}</span> field
+              {totalSectionsCount > 0 && (
+                <> &bull; <span className="font-semibold text-foreground">{totalSectionsCount}</span> seksi</>
+              )}
+            </div>
+            {templateSavedSuccess && (
+              <span className="text-xs font-medium text-emerald-600 flex items-center gap-1 animate-in fade-in">
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">Template Berhasil Dibuat!</span>
+              </span>
+            )}
+            {isSavedNotice && (
+              <span className="text-xs font-medium text-emerald-600 flex items-center gap-1 animate-in fade-in">
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">Perubahan Form Tersimpan!</span>
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleOpenSaveTemplateModal}
+              disabled={items.length === 0}
+              className="gap-1.5 text-xs shadow-xs"
+              title="Simpan konfigurasi form saat ini sebagai Master Template"
+            >
+              <BookmarkPlus className="w-3.5 h-3.5 text-primary" />
+              <span className="hidden sm:inline">Simpan Jadi</span> Template
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => saveMutation.mutate(items)}
+              disabled={saveMutation.isPending}
+              className="gap-1.5 text-xs shadow-xs"
+            >
+              <Save className="w-3.5 h-3.5" />
+              {saveMutation.isPending ? "Menyimpan..." : "Simpan Form"}
+            </Button>
+          </div>
+        </div>
+      </div>
 
       {/* Drawer Editor Panel Sisi Kanan (Untuk Field Input) */}
       <FormFieldEditorDrawer
@@ -625,6 +754,88 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
         onSave={handleSaveSectionModal}
         onDelete={handleDeleteField}
       />
+
+      {/* Modal Dialog Simpan Sebagai Master Template */}
+      <Dialog open={saveTemplateDialogOpen} onOpenChange={setSaveTemplateDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <BookmarkPlus className="w-5 h-5 text-primary" />
+              Simpan sebagai Master Template
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Simpan seluruh susunan {items.length} item form dan pengaturannya sebagai template global. Template ini bisa dipakai kembali di workspace lain.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="tpl-name" className="text-xs font-semibold">
+                Nama Master Template <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="tpl-name"
+                value={templateName}
+                onChange={(e) => setTemplateName(e.target.value)}
+                placeholder="Contoh: Form Registrasi Standar Peserta"
+                className="text-xs"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="tpl-desc" className="text-xs font-semibold">
+                Deskripsi Singkat (Opsional)
+              </Label>
+              <Textarea
+                id="tpl-desc"
+                value={templateDesc}
+                onChange={(e) => setTemplateDesc(e.target.value)}
+                placeholder="Catatan tujuan atau petunjuk pemakaian template..."
+                rows={3}
+                className="text-xs"
+              />
+            </div>
+
+            <div className="p-3 bg-muted/60 rounded-md border text-[11px] text-muted-foreground space-y-1">
+              <p className="font-semibold text-foreground">Ringkasan Konfigurasi:</p>
+              <p>• {totalSectionsCount} Seksi / Grup</p>
+              <p>• {totalFieldsCount} Input Checklist Form</p>
+              <p>• {availableColumnNames.length} Kolom sampel referensi</p>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setSaveTemplateDialogOpen(false)}
+              className="text-xs"
+            >
+              Batal
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => saveAsTemplateMutation.mutate()}
+              disabled={!templateName.trim() || saveAsTemplateMutation.isPending}
+              className="text-xs gap-1.5"
+            >
+              {saveAsTemplateMutation.isPending ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Menyimpan...
+                </>
+              ) : (
+                <>
+                  <BookmarkPlus className="w-3.5 h-3.5" />
+                  Simpan Template
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

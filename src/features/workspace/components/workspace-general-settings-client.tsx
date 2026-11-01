@@ -20,6 +20,9 @@ import {
   Trash2,
   FileText,
   Calendar,
+  KeyRound,
+  User,
+  Image as ImageIcon,
 } from "lucide-react";
 
 export function WorkspaceGeneralSettingsClient({ workspaceId }: { workspaceId: string }) {
@@ -43,6 +46,9 @@ export function WorkspaceGeneralSettingsClient({ workspaceId }: { workspaceId: s
   const [description, setDescription] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [uniqueKeyColumn, setUniqueKeyColumn] = useState("");
+  const [nameColumn, setNameColumn] = useState("");
+  const [photoColumn, setPhotoColumn] = useState("");
   const [isSavedNotice, setIsSavedNotice] = useState(false);
   const [initialized, setInitialized] = useState(false);
 
@@ -51,11 +57,22 @@ export function WorkspaceGeneralSettingsClient({ workspaceId }: { workspaceId: s
     setDescription(workspace.description || "");
     setStartDate(workspace.startDate || "");
     setEndDate(workspace.endDate || "");
+    setUniqueKeyColumn(workspace.uniqueKeyColumn || "");
+    setNameColumn(workspace.nameColumn || "");
+    setPhotoColumn(workspace.photoColumn || "");
     setInitialized(true);
   }
 
   const updateMutation = useMutation({
-    mutationFn: (updatedData: { name: string; description?: string; startDate: string; endDate: string }) =>
+    mutationFn: (updatedData: {
+      name: string;
+      description?: string;
+      startDate: string;
+      endDate: string;
+      uniqueKeyColumn?: string;
+      nameColumn?: string;
+      photoColumn?: string;
+    }) =>
       api.updateWorkspace(workspaceId, updatedData),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["workspace", workspaceId] });
@@ -72,6 +89,9 @@ export function WorkspaceGeneralSettingsClient({ workspaceId }: { workspaceId: s
       description,
       startDate,
       endDate,
+      uniqueKeyColumn: uniqueKeyColumn.trim() || undefined,
+      nameColumn: nameColumn.trim() || undefined,
+      photoColumn: photoColumn.trim() || undefined,
     });
   };
 
@@ -167,6 +187,66 @@ export function WorkspaceGeneralSettingsClient({ workspaceId }: { workspaceId: s
                   required
                   className="text-xs h-9"
                 />
+              </div>
+            </div>
+
+            {/* Pemetaan Kolom Profil Peserta */}
+            <div className="pt-4 border-t border-border/60 space-y-3">
+              <div>
+                <h3 className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                  <KeyRound className="w-3.5 h-3.5 text-primary" />
+                  Pemetaan Kolom Identitas Peserta
+                </h3>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Tentukan nama kolom dari berkas import yang dijadikan acuan NIK/ID unik, nama, dan foto pada kartu profil peserta.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-muted/30 p-3 rounded-lg border border-border/60">
+                <div className="space-y-1">
+                  <Label htmlFor="ws-uniquekey" className="text-[11px] font-semibold flex items-center gap-1">
+                    <KeyRound className="w-3 h-3 text-primary" />
+                    Kolom Kunci ID Unik
+                  </Label>
+                  <Input
+                    id="ws-uniquekey"
+                    value={uniqueKeyColumn}
+                    onChange={(e) => setUniqueKeyColumn(e.target.value)}
+                    placeholder="Contoh: NIK, NIM, ID"
+                    className="text-xs h-8 bg-background"
+                  />
+                  <p className="text-[10px] text-muted-foreground">Header kolom unik di berkas peserta</p>
+                </div>
+
+                <div className="space-y-1">
+                  <Label htmlFor="ws-namecol" className="text-[11px] font-semibold flex items-center gap-1">
+                    <User className="w-3 h-3 text-primary" />
+                    Kolom Nama Lengkap
+                  </Label>
+                  <Input
+                    id="ws-namecol"
+                    value={nameColumn}
+                    onChange={(e) => setNameColumn(e.target.value)}
+                    placeholder="Contoh: Nama Lengkap"
+                    className="text-xs h-8 bg-background"
+                  />
+                  <p className="text-[10px] text-muted-foreground">Header kolom nama di berkas peserta</p>
+                </div>
+
+                <div className="space-y-1">
+                  <Label htmlFor="ws-photocol" className="text-[11px] font-semibold flex items-center gap-1">
+                    <ImageIcon className="w-3 h-3 text-primary" />
+                    Kolom Foto Avatar
+                  </Label>
+                  <Input
+                    id="ws-photocol"
+                    value={photoColumn}
+                    onChange={(e) => setPhotoColumn(e.target.value)}
+                    placeholder="Contoh: Foto, Link Foto"
+                    className="text-xs h-8 bg-background"
+                  />
+                  <p className="text-[10px] text-muted-foreground">Header kolom foto / link Google Drive</p>
+                </div>
               </div>
             </div>
 
