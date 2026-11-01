@@ -11,6 +11,7 @@ import {
   CardDescription,
   CardFooter,
 } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -54,6 +55,7 @@ import {
   FileType,
   Settings2,
   AlertTriangle,
+  Info,
   Users,
   Search,
   Check,
@@ -112,6 +114,10 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
 
   // Step 2: Duplication analysis state
   const [analyzedRows, setAnalyzedRows] = useState<AnalyzedRow[]>([]);
+  const [filteredOutSummary, setFilteredOutSummary] = useState<{
+    internalDuplicatesDiscarded: number;
+    emptyKeyDiscarded: number;
+  }>({ internalDuplicatesDiscarded: 0, emptyKeyDiscarded: 0 });
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [filterTab, setFilterTab] = useState<"all" | "duplicates" | "new">("all");
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -294,67 +300,74 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
 
   // Compute duplicate analysis when advancing to Step 2
   const runDuplicationCheck = () => {
-    const seenFileKeys = new Map<string, number>();
-    const list: AnalyzedRow[] = [];
+    // 1. Cari baris terakhir untuk setiap kunci unik (ambil baris kemunculan terakhir jika ada duplikat dalam berkas)
+    // Sekaligus catat baris tanpa kunci unik.
+    const lastOccurrenceByKey = new Map<string, number>();
+    let emptyKeyDiscarded = 0;
+    let internalDuplicatesDiscarded = 0;
 
     rawRows.forEach((row, rowIdx) => {
-      // Use original row data directly as participant data
-      const data = { ...row };
-
       const rawKeyValue = row[selectedKeyField] ?? "";
       const keyValue = String(rawKeyValue).trim();
       const lowerKey = keyValue.toLowerCase();
 
-      let isDuplicate = false;
-      let duplicateType: "workspace" | "internal" | "both" | undefined;
-      let existingId: string | undefined;
-      let existingParticipant: Participant | undefined;
-
-      if (lowerKey !== "") {
-        // 1. Check against workspace existing participants
-        const matchedParticipant = existingParticipants.find((p) => {
-          const valInP = String(p.data[selectedKeyField] ?? "").trim().toLowerCase();
-          return valInP !== "" && valInP === lowerKey;
-        });
-
-        const isWorkspaceDuplicate = !!matchedParticipant;
-        if (matchedParticipant) {
-          existingId = matchedParticipant.id;
-          existingParticipant = matchedParticipant;
-        }
-
-        // 2. Check internal duplicate in the file
-        const isInternalDuplicate = seenFileKeys.has(lowerKey);
-
-        if (isWorkspaceDuplicate && isInternalDuplicate) {
-          isDuplicate = true;
-          duplicateType = "both";
-        } else if (isWorkspaceDuplicate) {
-          isDuplicate = true;
-          duplicateType = "workspace";
-        } else if (isInternalDuplicate) {
-          isDuplicate = true;
-          duplicateType = "internal";
-        }
-
-        seenFileKeys.set(lowerKey, rowIdx);
+      if (!lowerKey) {
+        emptyKeyDiscarded++;
+        return;
       }
+
+      if (lastOccurrenceByKey.has(lowerKey)) {
+        internalDuplicatesDiscarded++;
+      }
+      // Menyimpan rowIdx terakhir untuk lowerKey ini
+      lastOccurrenceByKey.set(lowerKey, rowIdx);
+    });
+
+    const keptIndices = new Set(lastOccurrenceByKey.values());
+
+    // 2. Buat list baris yang lolos (hanya baris terakhir, mempertahankan urutan baris)
+    const list: AnalyzedRow[] = [];
+
+    rawRows.forEach((row, rowIdx) => {
+      if (!keptIndices.has(rowIdx)) {
+        return;
+      }
+
+      const data = { ...row };
+      const rawKeyValue = row[selectedKeyField] ?? "";
+      const keyValue = String(rawKeyValue).trim();
+      const lowerKey = keyValue.toLowerCase();
+
+      // Cek apakah ada di workspace existing participants
+      const matchedParticipant = existingParticipants.find((p) => {
+        const valInP = String(p.data[selectedKeyField] ?? "").trim().toLowerCase();
+        return valInP !== "" && valInP === lowerKey;
+      });
+
+      const isDuplicate = !!matchedParticipant;
+      const existingId = matchedParticipant?.id;
+      const existingParticipant = matchedParticipant;
 
       list.push({
         rowIdx,
         data,
-        keyValue: keyValue || `(Baris ${rowIdx + 1}: Tanpa ${selectedKeyField})`,
+        keyValue,
         isDuplicate,
-        duplicateType,
+        duplicateType: isDuplicate ? "workspace" : undefined,
         existingId,
         existingParticipant,
         action: isDuplicate ? "overwrite" : "create",
       });
     });
 
+    setFilteredOutSummary({
+      internalDuplicatesDiscarded,
+      emptyKeyDiscarded,
+    });
     setAnalyzedRows(list);
     setSearchQuery("");
     setFilterTab("all");
+    setCurrentPage(1);
     setStep(2);
   };
 
@@ -474,6 +487,7 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
     setFileName("");
     setCsvContent(null);
     setAnalyzedRows([]);
+    setFilteredOutSummary({ internalDuplicatesDiscarded: 0, emptyKeyDiscarded: 0 });
     setImportResult(null);
     setStreamProgress(null);
     setStreamError(null);
@@ -949,6 +963,38 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
       ========================================================================= */}
       {step === 2 && (
         <div className="space-y-5">
+          {/* Alert Informasi Penyaringan Berkas (Duplikat Internal / Kunci Kosong) */}
+          {(filteredOutSummary.internalDuplicatesDiscarded > 0 ||
+            filteredOutSummary.emptyKeyDiscarded > 0) && (
+            <Alert className="border-blue-500/30 bg-blue-50/50 text-blue-900">
+              <Info className="h-4 w-4 text-blue-600" />
+              <AlertTitle className="text-xs font-semibold text-blue-900">
+                Penyaringan Otomatis Berkas
+              </AlertTitle>
+              <AlertDescription className="text-xs text-blue-800 space-y-1">
+                {filteredOutSummary.internalDuplicatesDiscarded > 0 && (
+                  <p>
+                    Ditemukan{" "}
+                    <strong>{filteredOutSummary.internalDuplicatesDiscarded}</strong> baris duplikat di dalam berkas. Sistem secara otomatis hanya mengambil baris terakhir untuk setiap kunci{" "}
+                    <code className="px-1 py-0.5 rounded bg-blue-100 text-blue-900 font-mono text-[11px]">
+                      {selectedKeyField}
+                    </code>
+                    , sedangkan baris-baris sebelumnya telah disaring.
+                  </p>
+                )}
+                {filteredOutSummary.emptyKeyDiscarded > 0 && (
+                  <p>
+                    Terdapat <strong>{filteredOutSummary.emptyKeyDiscarded}</strong> baris yang kolom{" "}
+                    <code className="px-1 py-0.5 rounded bg-blue-100 text-blue-900 font-mono text-[11px]">
+                      {selectedKeyField}
+                    </code>
+                    -nya kosong dan otomatis diabaikan karena kolom identitas unik wajib terisi.
+                  </p>
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
+
           {/* Summary Badges Card */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <Card className="border shadow-xs">
