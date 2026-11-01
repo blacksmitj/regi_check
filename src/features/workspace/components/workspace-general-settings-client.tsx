@@ -7,6 +7,8 @@ import { api } from "@/lib/api/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field, FieldLabel, FieldGroup, FieldDescription } from "@/components/ui/field";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { WorkspaceConfirmationDialog } from "./workspace-confirmation-dialog";
@@ -46,6 +48,7 @@ export function WorkspaceGeneralSettingsClient({ workspaceId }: { workspaceId: s
   const [description, setDescription] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [status, setStatus] = useState<"active" | "archived">("active");
   const [uniqueKeyColumn, setUniqueKeyColumn] = useState("");
   const [nameColumn, setNameColumn] = useState("");
   const [photoColumn, setPhotoColumn] = useState("");
@@ -57,6 +60,7 @@ export function WorkspaceGeneralSettingsClient({ workspaceId }: { workspaceId: s
     setDescription(workspace.description || "");
     setStartDate(workspace.startDate || "");
     setEndDate(workspace.endDate || "");
+    setStatus(workspace.status || "active");
     setUniqueKeyColumn(workspace.uniqueKeyColumn || "");
     setNameColumn(workspace.nameColumn || "");
     setPhotoColumn(workspace.photoColumn || "");
@@ -69,6 +73,7 @@ export function WorkspaceGeneralSettingsClient({ workspaceId }: { workspaceId: s
       description?: string;
       startDate: string;
       endDate: string;
+      status?: "active" | "archived";
       uniqueKeyColumn?: string;
       nameColumn?: string;
       photoColumn?: string;
@@ -89,6 +94,7 @@ export function WorkspaceGeneralSettingsClient({ workspaceId }: { workspaceId: s
       description,
       startDate,
       endDate,
+      status,
       uniqueKeyColumn: uniqueKeyColumn.trim() || undefined,
       nameColumn: nameColumn.trim() || undefined,
       photoColumn: photoColumn.trim() || undefined,
@@ -135,6 +141,29 @@ export function WorkspaceGeneralSettingsClient({ workspaceId }: { workspaceId: s
         <CardContent className="p-5">
           <form onSubmit={handleSave} className="space-y-4">
             <FieldGroup className="gap-4">
+              {/* Status Workspace Switch */}
+              <div className="flex items-center justify-between p-3.5 rounded-lg border border-border/80 bg-muted/20">
+                <div className="space-y-0.5 pr-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-foreground">
+                      Status Publikasi Workspace
+                    </span>
+                    <Badge variant={status === "active" ? "default" : "secondary"} className="text-[10px]">
+                      {status === "active" ? "Aktif" : "Diarsipkan"}
+                    </Badge>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    {status === "active"
+                      ? "Workspace aktif dan dapat dilihat serta diakses oleh seluruh petugas untuk pengecekan peserta."
+                      : "Workspace dinonaktifkan (diarsipkan). Workspace ini disembunyikan dan tidak dapat dilihat oleh petugas lain."}
+                  </p>
+                </div>
+                <Switch
+                  checked={status === "active"}
+                  onCheckedChange={(checked) => setStatus(checked ? "active" : "archived")}
+                />
+              </div>
+
               <Field className="space-y-1.5">
                 <FieldLabel htmlFor="ws-name" className="text-xs font-semibold">Nama Workspace / Acara</FieldLabel>
                 <Input
