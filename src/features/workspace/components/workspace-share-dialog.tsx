@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Copy, Check, Share2, ExternalLink } from "lucide-react";
 
 interface WorkspaceShareDialogProps {
@@ -61,15 +62,16 @@ export function WorkspaceShareDialog({
         </DialogHeader>
 
         <div className="space-y-3 py-2">
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-foreground">
+          <Field className="gap-1.5">
+            <FieldLabel htmlFor="workspace-share-url" className="text-xs font-medium text-foreground">
               Tautan Workspace
-            </label>
-            <div className="flex items-center gap-2">
+            </FieldLabel>
+            <div className="flex items-center gap-2 w-full">
               <Input
+                id="workspace-share-url"
                 readOnly
                 value={shareUrl}
-                className="text-xs font-mono select-all bg-muted/50 h-9"
+                className="text-xs font-mono select-all bg-muted/50 h-9 flex-1"
                 onFocus={(e) => e.target.select()}
               />
               <Button
@@ -91,7 +93,7 @@ export function WorkspaceShareDialog({
                 )}
               </Button>
             </div>
-          </div>
+          </Field>
 
           <div className="rounded-lg border border-border bg-muted/30 p-3 text-[11px] text-muted-foreground space-y-1">
             <p className="font-semibold text-foreground flex items-center gap-1.5">

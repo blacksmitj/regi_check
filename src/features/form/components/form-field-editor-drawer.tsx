@@ -4,7 +4,7 @@ import { useState } from "react";
 import { FormField, FormFieldType } from "@/types/domain";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Field, FieldLabel, FieldGroup, FieldDescription } from "@/components/ui/field";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
@@ -130,199 +130,201 @@ function DrawerInner({
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
-          {/* Sumber Field (Hanya untuk field biasa) */}
-          {!isSection && (
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">Sumber Field</Label>
-              <Select
-                value={formData.sourceType === "excel_column" ? "excel_column" : "custom_field"}
-                onValueChange={(val) => {
-                  if (!val) return;
-                  const source = val as "custom_field" | "excel_column";
-                  setFormData((prev) => ({
-                    ...prev,
-                    sourceType: source,
-                    excelColumn: source === "excel_column" ? prev.excelColumn || availableColumns[0] || "" : undefined,
-                  }));
-                }}
-              >
-                <SelectTrigger className="w-full h-8 text-xs font-medium">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="custom_field">Field Tambahan Admin (Baru)</SelectItem>
-                  <SelectItem value="excel_column">Kolom Bawaan Excel Peserta</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          )}
+          <FieldGroup className="gap-4">
+            {/* Sumber Field (Hanya untuk field biasa) */}
+            {!isSection && (
+              <Field className="space-y-1.5">
+                <FieldLabel className="text-xs font-semibold">Sumber Field</FieldLabel>
+                <Select
+                  value={formData.sourceType === "excel_column" ? "excel_column" : "custom_field"}
+                  onValueChange={(val) => {
+                    if (!val) return;
+                    const source = val as "custom_field" | "excel_column";
+                    setFormData((prev) => ({
+                      ...prev,
+                      sourceType: source,
+                      excelColumn: source === "excel_column" ? prev.excelColumn || availableColumns[0] || "" : undefined,
+                    }));
+                  }}
+                >
+                  <SelectTrigger className="w-full h-8 text-xs font-medium">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="custom_field">Field Tambahan Admin (Baru)</SelectItem>
+                    <SelectItem value="excel_column">Kolom Bawaan Excel Peserta</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+            )}
 
-          {/* Kolom Excel Mapping */}
-          {!isSection && formData.sourceType === "excel_column" && (
-            <div className="space-y-1.5 p-3 rounded-md bg-muted/40 border border-border">
-              <Label className="text-xs font-semibold">Petakan ke Kolom Excel</Label>
-              <Select
-                value={formData.excelColumn || ""}
-                onValueChange={(val) => {
-                  if (!val) return;
-                  setFormData((prev) => ({
-                    ...prev,
-                    excelColumn: val,
-                    label: prev.label === "Field Form Baru" || !prev.label ? val : prev.label,
-                  }));
-                }}
-              >
-                <SelectTrigger className="w-full h-8 text-xs font-medium">
-                  <SelectValue placeholder="Pilih header kolom..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableColumns.length > 0 ? (
-                    availableColumns.map((col) => (
-                      <SelectItem key={col} value={col}>
-                        {col}
+            {/* Kolom Excel Mapping */}
+            {!isSection && formData.sourceType === "excel_column" && (
+              <Field className="space-y-1.5 p-3 rounded-md bg-muted/40 border border-border">
+                <FieldLabel className="text-xs font-semibold">Petakan ke Kolom Excel</FieldLabel>
+                <Select
+                  value={formData.excelColumn || ""}
+                  onValueChange={(val) => {
+                    if (!val) return;
+                    setFormData((prev) => ({
+                      ...prev,
+                      excelColumn: val,
+                      label: prev.label === "Field Form Baru" || !prev.label ? val : prev.label,
+                    }));
+                  }}
+                >
+                  <SelectTrigger className="w-full h-8 text-xs font-medium">
+                    <SelectValue placeholder="Pilih header kolom..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableColumns.length > 0 ? (
+                      availableColumns.map((col) => (
+                        <SelectItem key={col} value={col}>
+                          {col}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="none" disabled>
+                        Tidak ada kolom Excel ditemukan
                       </SelectItem>
-                    ))
-                  ) : (
-                    <SelectItem value="none" disabled>
-                      Tidak ada kolom Excel ditemukan
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-              <p className="text-[11px] text-muted-foreground">
-                Nilai awal input peserta akan diambil dari data kolom Excel ini.
-              </p>
-            </div>
-          )}
+                    )}
+                  </SelectContent>
+                </Select>
+                <FieldDescription className="text-[11px] text-muted-foreground">
+                  Nilai awal input peserta akan diambil dari data kolom Excel ini.
+                </FieldDescription>
+              </Field>
+            )}
 
-          {/* Label Field / Judul Section */}
-          <div className="space-y-1.5">
-            <Label className="text-xs font-semibold">
-              {isSection ? "Judul Section / Group" : "Label Field di Form"}
-            </Label>
-            <Input
-              value={formData.label}
-              onChange={(e) => setFormData((prev) => ({ ...prev, label: e.target.value }))}
-              placeholder={
-                isSection
-                  ? "Contoh: Data Identitas Diri / Berkas Administrasi"
-                  : "Contoh: Nama Lengkap / Konfirmasi Hadir"
-              }
-              className="text-xs h-8"
-            />
-          </div>
+            {/* Label Field / Judul Section */}
+            <Field className="space-y-1.5">
+              <FieldLabel className="text-xs font-semibold">
+                {isSection ? "Judul Section / Group" : "Label Field di Form"}
+              </FieldLabel>
+              <Input
+                value={formData.label}
+                onChange={(e) => setFormData((prev) => ({ ...prev, label: e.target.value }))}
+                placeholder={
+                  isSection
+                    ? "Contoh: Data Identitas Diri / Berkas Administrasi"
+                    : "Contoh: Nama Lengkap / Konfirmasi Hadir"
+                }
+                className="text-xs h-8"
+              />
+            </Field>
 
-          {/* Deskripsi / Petunjuk Pengisian */}
-          <div className="space-y-1.5">
-            <Label className="text-xs font-semibold">
-              {isSection ? "Deskripsi / Subjudul Section (Opsional)" : "Petunjuk Pengisian (Opsional)"}
-            </Label>
-            <Textarea
-              value={formData.description || ""}
-              onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
-              placeholder={
-                isSection
-                  ? "Contoh: Pastikan data di bagian ini sesuai dengan dokumen fisik asli peserta..."
-                  : "Contoh: Pastikan nomor HP aktif WhatsApp..."
-              }
-              rows={2}
-              className="text-xs"
-            />
-          </div>
-
-          {/* Tipe Input (Hanya untuk field biasa, bukan section/group) */}
-          {!isSection && (
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">Tipe Elemen Form</Label>
-              <Select value={formData.type} onValueChange={(val) => handleTypeChange(val as FormFieldType)}>
-                <SelectTrigger className="w-full h-8 text-xs font-medium">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="checkbox">Checkbox (Centang / Ya-Tidak)</SelectItem>
-                  <SelectItem value="text">Teks Pendek (Text)</SelectItem>
-                  <SelectItem value="textarea">Teks Panjang (Textarea)</SelectItem>
-                  <SelectItem value="number">Angka (Number)</SelectItem>
-                  <SelectItem value="date">Tanggal (Date)</SelectItem>
-                  <SelectItem value="select">Dropdown Pilihan (Select)</SelectItem>
-                  <SelectItem value="radio">Radio Buttons (Pilihan Tunggal)</SelectItem>
-                  <SelectItem value="email">Email</SelectItem>
-                  <SelectItem value="phone">Nomor Telepon / WhatsApp</SelectItem>
-                  <SelectItem value="image">Upload Foto (Image)</SelectItem>
-                  <SelectItem value="file">Upload Berkas / PDF (File)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          {/* Options jika tipe select atau radio */}
-          {!isSection && (formData.type === "select" || formData.type === "radio") && (
-            <div className="space-y-1.5 p-3 rounded-md bg-muted/40 border border-border">
-              <Label className="text-xs font-semibold">Daftar Pilihan Opsi (Satu baris per opsi)</Label>
+            {/* Deskripsi / Petunjuk Pengisian */}
+            <Field className="space-y-1.5">
+              <FieldLabel className="text-xs font-semibold">
+                {isSection ? "Deskripsi / Subjudul Section (Opsional)" : "Petunjuk Pengisian (Opsional)"}
+              </FieldLabel>
               <Textarea
-                value={optionsText}
-                onChange={(e) => setOptionsText(e.target.value)}
-                placeholder="Pilihan A&#10;Pilihan B&#10;Pilihan C"
-                rows={3}
+                value={formData.description || ""}
+                onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
+                placeholder={
+                  isSection
+                    ? "Contoh: Pastikan data di bagian ini sesuai dengan dokumen fisik asli peserta..."
+                    : "Contoh: Pastikan nomor HP aktif WhatsApp..."
+                }
+                rows={2}
                 className="text-xs"
               />
-            </div>
-          )}
+            </Field>
 
-          {/* Switch Opsi Form (hanya untuk field biasa) */}
-          {!isSection && (
-            <div className="space-y-3 pt-2 border-t border-border">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label className="text-xs font-medium">Dapat Diedit Petugas (Editable)</Label>
-                  <p className="text-[11px] text-muted-foreground">Petugas dapat mengubah nilai saat registrasi</p>
-                </div>
-                <Switch
-                  checked={formData.editable}
-                  onCheckedChange={(checked) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      editable: checked,
-                      // Jika no-edit (checked = false), otomatis no-required
-                      required: !checked ? false : prev.required,
-                    }))
-                  }
-                />
-              </div>
+            {/* Tipe Input (Hanya untuk field biasa, bukan section/group) */}
+            {!isSection && (
+              <Field className="space-y-1.5">
+                <FieldLabel className="text-xs font-semibold">Tipe Elemen Form</FieldLabel>
+                <Select value={formData.type} onValueChange={(val) => handleTypeChange(val as FormFieldType)}>
+                  <SelectTrigger className="w-full h-8 text-xs font-medium">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="checkbox">Checkbox (Centang / Ya-Tidak)</SelectItem>
+                    <SelectItem value="text">Teks Pendek (Text)</SelectItem>
+                    <SelectItem value="textarea">Teks Panjang (Textarea)</SelectItem>
+                    <SelectItem value="number">Angka (Number)</SelectItem>
+                    <SelectItem value="date">Tanggal (Date)</SelectItem>
+                    <SelectItem value="select">Dropdown Pilihan (Select)</SelectItem>
+                    <SelectItem value="radio">Radio Buttons (Pilihan Tunggal)</SelectItem>
+                    <SelectItem value="email">Email</SelectItem>
+                    <SelectItem value="phone">Nomor Telepon / WhatsApp</SelectItem>
+                    <SelectItem value="image">Upload Foto (Image)</SelectItem>
+                    <SelectItem value="file">Upload Berkas / PDF (File)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+            )}
 
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label className="text-xs font-medium">Wajib Diisi (Required)</Label>
-                  <p className="text-[11px] text-muted-foreground">
-                    Form tidak lengkap bila field ini kosong
-                    {!formData.editable && " (dinonaktifkan jika field non-editable)"}
-                  </p>
-                </div>
-                <Switch
-                  checked={formData.required}
-                  disabled={!formData.editable}
-                  onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, required: checked }))}
+            {/* Options jika tipe select atau radio */}
+            {!isSection && (formData.type === "select" || formData.type === "radio") && (
+              <Field className="space-y-1.5 p-3 rounded-md bg-muted/40 border border-border">
+                <FieldLabel className="text-xs font-semibold">Daftar Pilihan Opsi (Satu baris per opsi)</FieldLabel>
+                <Textarea
+                  value={optionsText}
+                  onChange={(e) => setOptionsText(e.target.value)}
+                  placeholder="Pilihan A&#10;Pilihan B&#10;Pilihan C"
+                  rows={3}
+                  className="text-xs"
                 />
-              </div>
+              </Field>
+            )}
 
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label className="text-xs font-medium">Wajibkan Foto Bukti (Evidence)</Label>
-                  <p className="text-[11px] text-muted-foreground">Petugas wajib mengambil foto bukti saat verifikasi</p>
-                </div>
-                <Switch
-                  checked={!!formData.evidenceEnabled}
-                  onCheckedChange={(checked) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      evidenceEnabled: checked,
-                      evidenceRequired: checked ? prev.evidenceRequired : false,
-                    }))
-                  }
-                />
+            {/* Switch Opsi Form (hanya untuk field biasa) */}
+            {!isSection && (
+              <div className="space-y-3 pt-2 border-t border-border">
+                <Field orientation="horizontal" className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <FieldLabel className="text-xs font-medium">Dapat Diedit Petugas (Editable)</FieldLabel>
+                    <FieldDescription className="text-[11px] text-muted-foreground">Petugas dapat mengubah nilai saat registrasi</FieldDescription>
+                  </div>
+                  <Switch
+                    checked={formData.editable}
+                    onCheckedChange={(checked) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        editable: checked,
+                        // Jika no-edit (checked = false), otomatis no-required
+                        required: !checked ? false : prev.required,
+                      }))
+                    }
+                  />
+                </Field>
+
+                <Field orientation="horizontal" className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <FieldLabel className="text-xs font-medium">Wajib Diisi (Required)</FieldLabel>
+                    <FieldDescription className="text-[11px] text-muted-foreground">
+                      Form tidak lengkap bila field ini kosong
+                      {!formData.editable && " (dinonaktifkan jika field non-editable)"}
+                    </FieldDescription>
+                  </div>
+                  <Switch
+                    checked={formData.required}
+                    disabled={!formData.editable}
+                    onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, required: checked }))}
+                  />
+                </Field>
+
+                <Field orientation="horizontal" className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <FieldLabel className="text-xs font-medium">Wajibkan Foto Bukti (Evidence)</FieldLabel>
+                    <FieldDescription className="text-[11px] text-muted-foreground">Petugas wajib mengambil foto bukti saat verifikasi</FieldDescription>
+                  </div>
+                  <Switch
+                    checked={!!formData.evidenceEnabled}
+                    onCheckedChange={(checked) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        evidenceEnabled: checked,
+                        evidenceRequired: checked ? prev.evidenceRequired : false,
+                      }))
+                    }
+                  />
+                </Field>
               </div>
-            </div>
-          )}
+            )}
+          </FieldGroup>
         </div>
 
         <SheetFooter className="p-4 border-t border-border flex flex-row items-center justify-between gap-2">

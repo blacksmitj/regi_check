@@ -9,12 +9,12 @@ import {
   EvidenceFile,
   OfficerHistoryItem,
 } from "@/types/domain";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { Field, FieldLabel, FieldDescription, FieldError } from "@/components/ui/field";
 import { Badge } from "@/components/ui/badge";
 import {
   Sheet,
@@ -46,6 +46,7 @@ import {
   getGoogleDriveThumbnailUrl,
   isPdfUrl,
 } from "@/lib/domain/drive-detector";
+import { api } from "@/lib/api/client";
 import {
   UploadCloud,
   FileText,
@@ -63,6 +64,9 @@ import {
   UserCheck,
   Clock,
   ChevronLeft,
+  Loader2,
+  Trash2,
+  X,
 } from "lucide-react";
 
 interface FormEntryPanelProps {
@@ -112,6 +116,10 @@ export function FormEntryPanel({
 
   const [formData, setFormData] = useState<Record<string, unknown>>({});
   const [evidenceMap, setEvidenceMap] = useState<Record<string, EvidenceFile[]>>({});
+  // Tracks which fieldKeys are currently uploading a file
+  const [uploadingFields, setUploadingFields] = useState<Set<string>>(new Set());
+  // Tracks upload errors per fieldKey
+  const [uploadErrors, setUploadErrors] = useState<Record<string, string>>({});
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const [invalidFieldIds, setInvalidFieldIds] = useState<Set<string>>(new Set());
   const fieldCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -140,6 +148,46 @@ export function FormEntryPanel({
       title,
       type,
     });
+  };
+
+  const handleOpenFileFieldPreview = async (fieldKey: string, fieldLabel: string) => {
+    const attachments = evidenceMap[fieldKey] || [];
+    const currentFile = attachments[0];
+    if (currentFile?.localId) {
+      const blobUrl = await getEvidenceBlobUrl(currentFile.localId);
+      if (blobUrl) {
+        handleOpenPreview(blobUrl, currentFile.name || fieldLabel, "file");
+        return;
+      }
+    }
+    if (currentFile?.url) {
+      handleOpenPreview(currentFile.url, currentFile.name || fieldLabel, "file");
+      return;
+    }
+    const val = String(formData[fieldKey] || "");
+    if (val) {
+      handleOpenPreview(val, fieldLabel, "file");
+    }
+  };
+
+  const handleOpenImageFieldPreview = async (fieldKey: string, fieldLabel: string) => {
+    const attachments = evidenceMap[fieldKey] || [];
+    const currentFile = attachments[0];
+    if (currentFile?.localId) {
+      const blobUrl = await getEvidenceBlobUrl(currentFile.localId);
+      if (blobUrl) {
+        handleOpenPreview(blobUrl, currentFile.name || fieldLabel, "image");
+        return;
+      }
+    }
+    if (currentFile?.url) {
+      handleOpenPreview(currentFile.url, currentFile.name || fieldLabel, "image");
+      return;
+    }
+    const val = String(formData[fieldKey] || "");
+    if (val) {
+      handleOpenPreview(val, fieldLabel, "image");
+    }
   };
 
   const toggleSectionCollapse = (sectionId: string) => {
@@ -172,6 +220,9 @@ export function FormEntryPanel({
     setInvalidFieldIds(new Set());
     dirtyRef.current = false;
     setDirty(false);
+    // Reset upload state
+    setUploadingFields(new Set());
+    setUploadErrors({});
     (async () => {
       let draft;
       try {
@@ -188,6 +239,26 @@ export function FormEntryPanel({
         applyFormData(participant.data || {});
       }
       setDraftLoading(false);
+
+      // Restore evidenceMap from participant.data (keys prefixed with _evidence_)
+      const data = draft?.data || participant.data || {};
+      const restored: Record<string, EvidenceFile[]> = {};
+      for (const key of Object.keys(data)) {
+        if (key.startsWith("_evidence_")) {
+          const fieldKey = key.replace("_evidence_", "");
+          try {
+            const parsed = JSON.parse(String(data[key]));
+            if (Array.isArray(parsed)) {
+              restored[fieldKey] = parsed as EvidenceFile[];
+            }
+          } catch {
+            // ignore malformed entries
+          }
+        }
+      }
+      if (!cancelled) {
+        setEvidenceMap(restored);
+      }
     })();
     return () => {
       cancelled = true;
@@ -443,41 +514,96 @@ export function FormEntryPanel({
     }
   };
 
-  // Upload photo
-  const handlePhotoUpload = async (key: string, file: File) => {
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const dataUrl = reader.result as string;
-      await handleFieldValueChange(key, dataUrl);
-    };
-    reader.readAsDataURL(file);
-  };
+  // Upload file attachment (or image) — tries server (S3) first, falls back to IndexedDB
+  // Enforces 1 file only: replaces existing file for the fieldKey
+  const handleUploadAttachment = async (fieldKey: string, file: File, isImageField: boolean = false) => {
+    // Validate file type
+    if (isImageField) {
+      if (!file.type.startsWith("image/")) {
+        setUploadErrors((prev) => ({
+          ...prev,
+          [fieldKey]: "Format file tidak valid. Harap pilih file gambar (JPG, PNG, WebP).",
+        }));
+        return;
+      }
+    } else {
+      const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+      if (!isPdf) {
+        setUploadErrors((prev) => ({
+          ...prev,
+          [fieldKey]: "Format file tidak valid. Harap pilih file PDF (.pdf).",
+        }));
+        return;
+      }
+    }
 
-  // Upload file attachment (IndexedDB)
-  const handleUploadAttachment = async (fieldKey: string, file: File) => {
+    // Mark field as uploading & clear previous error
+    setUploadingFields((prev) => new Set(prev).add(fieldKey));
+    setUploadErrors((prev) => { const next = { ...prev }; delete next[fieldKey]; return next; });
+
     try {
-      const fileId = `att-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-      await saveEvidenceFile(fileId, file, file.name);
+      let uploadedFile: EvidenceFile;
 
-      const existing = evidenceMap[fieldKey] || [];
-      const updated: EvidenceFile[] = [
-        ...existing,
-        {
+      try {
+        // Attempt server upload (S3)
+        const result = await api.uploadEvidence(file);
+        uploadedFile = {
+          id: result.id,
+          name: result.name,
+          size: result.size,
+          type: result.type,
+          url: result.url,
+        };
+      } catch (serverErr) {
+        console.warn("Server upload failed, falling back to IndexedDB:", serverErr);
+        // Fallback: save to IndexedDB locally
+        const fileId = `att-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+        await saveEvidenceFile(fileId, file, file.name);
+        uploadedFile = {
           id: fileId,
           name: file.name,
           size: file.size,
           type: file.type,
           localId: fileId,
-        },
-      ];
+        };
+      }
 
-      setEvidenceMap((prev) => ({ ...prev, [fieldKey]: updated }));
+      // Enforce 1 file only: replace previous file
+      const updated: EvidenceFile[] = [uploadedFile];
+      const evidenceJson = JSON.stringify(updated);
+      const displayValue = uploadedFile.url || uploadedFile.name;
 
-      // Also save file name / info in participant data
-      await handleFieldValueChange(fieldKey, file.name);
+      handleFieldValueChange(fieldKey, displayValue);
+      handleFieldValueChange(`_evidence_${fieldKey}`, evidenceJson);
+
+      setEvidenceMap((prev) => ({
+        ...prev,
+        [fieldKey]: updated,
+      }));
     } catch (err) {
-      console.error("Failed to upload attachment", err);
+      console.error("Failed to upload file", err);
+      setUploadErrors((prev) => ({
+        ...prev,
+        [fieldKey]: "Gagal mengunggah file. Silakan coba lagi.",
+      }));
+    } finally {
+      setUploadingFields((prev) => {
+        const next = new Set(prev);
+        next.delete(fieldKey);
+        return next;
+      });
     }
+  };
+
+  // Remove uploaded attachment or clear file value
+  const handleRemoveAttachment = async (fieldKey: string) => {
+    handleFieldValueChange(fieldKey, "");
+    handleFieldValueChange(`_evidence_${fieldKey}`, "");
+    setEvidenceMap((prev) => {
+      const next = { ...prev };
+      delete next[fieldKey];
+      return next;
+    });
   };
 
   // Open preview in new tab
@@ -529,7 +655,7 @@ export function FormEntryPanel({
             >
               {displayIndex}
             </span>
-            <Label
+            <FieldLabel
               htmlFor={`form-input-${field.id}`}
               className={`text-xs font-semibold cursor-pointer truncate ${
                 isInvalid
@@ -542,7 +668,7 @@ export function FormEntryPanel({
               {field.required && (
                 <span className="text-rose-500 ml-0.5 font-bold">*</span>
               )}
-            </Label>
+            </FieldLabel>
           </div>
 
           {!isEditable && (
@@ -571,81 +697,178 @@ export function FormEntryPanel({
                 const displayImg = isDrive
                   ? getGoogleDriveThumbnailUrl(strVal, 400)
                   : strVal;
+                const isUploading = uploadingFields.has(fieldKey);
+                const uploadError = uploadErrors[fieldKey];
+                const attachments = evidenceMap[fieldKey] || [];
+                const currentFile = attachments[0];
 
                 return (
-                  <div className="flex items-center gap-4 flex-wrap">
+                  <div className="pt-1 space-y-2 max-w-lg">
+                    {/* Compact Card jika sudah ada gambar/file */}
                     {strVal ? (
-                      <div
-                        className="relative group cursor-pointer"
-                        onClick={() =>
-                          handleOpenPreview(strVal, field.label, "image")
-                        }
-                      >
-                        <img
-                          src={displayImg}
-                          alt={field.label}
-                          className="w-20 h-20 rounded-lg object-cover border border-border shadow-xs hover:opacity-90 transition-opacity"
-                        />
-                        <div className="absolute inset-0 bg-black/40 rounded-lg opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white text-[10px] font-medium gap-1">
-                          <ExternalLink className="w-3.5 h-3.5" />
-                          <span>Lihat</span>
+                      <div className="flex items-center justify-between p-2.5 rounded-lg border border-border bg-muted/30 hover:bg-muted/50 transition-colors text-xs group">
+                        <div
+                          className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer"
+                          onClick={() =>
+                            handleOpenImageFieldPreview(fieldKey, field.label)
+                          }
+                          title="Klik untuk melihat foto"
+                        >
+                          {/* Sisi Kiri: Thumbnail Kotak */}
+                          <div className="relative w-12 h-12 rounded-md overflow-hidden bg-muted border border-border shrink-0 flex items-center justify-center">
+                            <img
+                              src={displayImg}
+                              alt={field.label}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                            />
+                            <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white">
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </div>
+                          </div>
+
+                          {/* Detail Info File */}
+                          <div className="min-w-0 truncate">
+                            <p className="font-medium truncate text-foreground">
+                              {currentFile?.name || (isDrive ? "Foto Google Drive" : "Foto Terlampir")}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                              {currentFile?.size ? (
+                                <span>{(currentFile.size / 1024).toFixed(0)} KB ·</span>
+                              ) : null}
+                              {currentFile?.url ? (
+                                <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                                  Tersimpan di server (S3)
+                                </span>
+                              ) : isDrive ? (
+                                <span className="text-blue-600 dark:text-blue-400 font-medium">
+                                  Link Google Drive
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground">Gambar</span>
+                              )}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Sisi Kanan: Action Buttons */}
+                        <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() =>
+                              handleOpenImageFieldPreview(fieldKey, field.label)
+                            }
+                            className="h-7 text-xs text-primary px-2"
+                            title="Buka / Preview"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </Button>
+
+                          {isEditable && (
+                            <>
+                              <div>
+                                <input
+                                  id={`upload-img-change-${field.id}`}
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  disabled={isUploading}
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                      handleUploadAttachment(fieldKey, file, true);
+                                      e.target.value = "";
+                                    }
+                                  }}
+                                />
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  disabled={isUploading}
+                                  onClick={() => document.getElementById(`upload-img-change-${field.id}`)?.click()}
+                                  className="flex items-center gap-1 h-7 px-2 text-xs font-medium text-muted-foreground hover:text-foreground cursor-pointer"
+                                  title="Ganti Foto (Unggah ke S3)"
+                                >
+                                  {isUploading ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+                                  ) : (
+                                    <>
+                                      <Camera className="w-3.5 h-3.5" />
+                                      <span className="hidden sm:inline">Ganti</span>
+                                    </>
+                                  )}
+                                </Button>
+                              </div>
+
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleRemoveAttachment(fieldKey)}
+                                className="h-7 text-xs text-destructive px-2 opacity-70 hover:opacity-100"
+                                title="Hapus foto"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </Button>
+                            </>
+                          )}
                         </div>
                       </div>
                     ) : (
-                      <div className="w-20 h-20 rounded-lg bg-muted flex flex-col items-center justify-center text-muted-foreground border border-dashed border-border text-[11px]">
-                        <ImageIcon className="w-5 h-5 mb-1" />
-                        Belum ada
-                      </div>
-                    )}
-
-                    {isEditable && (
-                      <div className="space-y-2 flex-1 min-w-[200px]">
-                        <div className="flex items-center gap-2">
-                          <label className="cursor-pointer">
+                      /* Belum ada foto */
+                      isEditable && (
+                        <div className="flex items-center gap-3">
+                          <div>
                             <input
+                              id={`upload-img-new-${field.id}`}
                               type="file"
                               accept="image/*"
                               className="hidden"
+                              disabled={isUploading}
                               onChange={(e) => {
                                 const file = e.target.files?.[0];
                                 if (file) {
-                                  handlePhotoUpload(fieldKey, file);
+                                  handleUploadAttachment(fieldKey, file, true);
+                                  e.target.value = "";
                                 }
                               }}
                             />
-                            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-input bg-background hover:bg-muted text-xs font-medium w-fit">
-                              <Camera className="w-3.5 h-3.5 text-primary" />
-                              Pilih / Ambil Foto
-                            </div>
-                          </label>
-
-                          {strVal && !isDrive && (
                             <Button
                               type="button"
-                              variant="ghost"
+                              variant="outline"
                               size="sm"
-                              className="h-8 text-xs text-primary gap-1"
-                              onClick={() =>
-                                handleOpenPreview(strVal, field.label, "image")
-                              }
+                              disabled={isUploading}
+                              onClick={() => document.getElementById(`upload-img-new-${field.id}`)?.click()}
+                              className="flex items-center gap-1.5 px-3 py-1.5 h-auto rounded-md border border-input bg-background hover:bg-muted text-xs font-medium w-fit shadow-xs cursor-pointer"
                             >
-                              <ExternalLink className="w-3.5 h-3.5" />
-                              Preview Foto
+                              {isUploading ? (
+                                <>
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+                                  Mengunggah...
+                                </>
+                              ) : (
+                                <>
+                                  <Camera className="w-3.5 h-3.5 text-primary" />
+                                  Pilih Foto (Gambar)
+                                </>
+                              )}
                             </Button>
-                          )}
+                          </div>
+                          <span className="text-[11px] text-muted-foreground">
+                            Hanya file gambar (JPG, PNG, WebP)
+                          </span>
                         </div>
+                      )
+                    )}
 
-                        {!isDrive && (
-                          <Input
-                            placeholder="Link Google Drive foto atau URL gambar..."
-                            value={strVal}
-                            onChange={(e) =>
-                              handleFieldValueChange(fieldKey, e.target.value)
-                            }
-                            className="text-xs h-8"
-                          />
-                        )}
-                      </div>
+                    {/* Upload error message */}
+                    {uploadError && (
+                      <p className="text-[11px] font-medium text-rose-600 dark:text-rose-400 flex items-center gap-1">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                        {uploadError}
+                      </p>
                     )}
                   </div>
                 );
@@ -708,9 +931,9 @@ export function FormEntryPanel({
                   ? field.options
                   : ["Pilihan 1", "Pilihan 2"]
                 ).map((opt) => (
-                  <label
+                  <Label
                     key={opt}
-                    className="flex items-center gap-2 text-xs cursor-pointer"
+                    className="flex items-center gap-2 text-xs cursor-pointer font-normal"
                   >
                     <input
                       type="radio"
@@ -721,7 +944,7 @@ export function FormEntryPanel({
                       className="accent-primary"
                     />
                     <span>{opt}</span>
-                  </label>
+                  </Label>
                 ))}
               </div>
             )}
@@ -838,119 +1061,181 @@ export function FormEntryPanel({
                 const strVal = String(currentValue || "").trim();
                 const isDrive = isGoogleDriveUrl(strVal);
                 const isPdf = isPdfUrl(strVal);
+                const isUploading = uploadingFields.has(fieldKey);
+                const uploadError = uploadErrors[fieldKey];
+                const attachments = evidenceMap[fieldKey] || [];
+                const currentFile = attachments[0];
 
                 return (
-                  <div className="pt-1 space-y-3">
-                    {/* If participant data contains a direct link / Drive URL */}
-                    {strVal && (
-                      <div
-                        onClick={() =>
-                          handleOpenPreview(strVal, field.label, "file")
-                        }
-                        className="flex items-center justify-between p-2.5 rounded-lg border border-border bg-muted/40 hover:bg-muted/70 cursor-pointer transition-colors max-w-lg group"
-                      >
-                        <div className="flex items-center gap-2 truncate pr-2">
-                          <FileText className="w-4 h-4 text-primary shrink-0" />
-                          <div className="truncate">
-                            {!isDrive && (
-                              <p className="text-xs font-medium truncate">
-                                {strVal}
-                              </p>
-                            )}
-                            {(isDrive || isPdf) && (
-                              <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
-                                <CheckCircle2 className="w-3 h-3" />{" "}
-                                {isDrive ? "Link Google Drive" : "Dokumen PDF"}
-                              </p>
-                            )}
+                  <div className="pt-1 space-y-2 max-w-lg">
+                    {/* Compact Card jika sudah ada dokumen/file */}
+                    {strVal ? (
+                      <div className="flex items-center justify-between p-2.5 rounded-lg border border-border bg-muted/30 hover:bg-muted/50 transition-colors text-xs group">
+                        <div
+                          className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer"
+                          onClick={() =>
+                            handleOpenFileFieldPreview(fieldKey, field.label)
+                          }
+                          title="Klik untuk melihat dokumen"
+                        >
+                          {/* Sisi Kiri: Thumbnail Kotak Ikon PDF */}
+                          <div className="w-12 h-12 rounded-md bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/40 shrink-0 flex flex-col items-center justify-center group-hover:scale-105 transition-transform">
+                            <FileText className="w-5 h-5 mb-0.5" />
+                            <span className="text-[9px] font-bold tracking-wider uppercase leading-none">
+                              PDF
+                            </span>
+                          </div>
+
+                          {/* Detail Info File */}
+                          <div className="min-w-0 truncate">
+                            <p className="font-medium truncate text-foreground">
+                              {currentFile?.name || (isDrive ? "Dokumen Google Drive" : "Dokumen Terlampir")}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                              {currentFile?.size ? (
+                                <span>{(currentFile.size / 1024).toFixed(0)} KB ·</span>
+                              ) : null}
+                              {currentFile?.url ? (
+                                <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                                  Tersimpan di server (S3)
+                                </span>
+                              ) : isDrive ? (
+                                <span className="text-blue-600 dark:text-blue-400 font-medium">
+                                  Link Google Drive
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground">Dokumen PDF</span>
+                              )}
+                            </p>
                           </div>
                         </div>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 text-xs text-primary gap-1 shrink-0 group-hover:bg-background/80"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleOpenPreview(strVal, field.label, "file");
-                          }}
-                        >
-                          <ExternalLink className="w-3 h-3" />
-                          Preview
-                        </Button>
-                      </div>
-                    )}
 
-                    {isEditable && (
-                      <div className="space-y-2 max-w-lg">
-                        {!isDrive && (
-                          <Input
-                            placeholder="Link Google Drive dokumen / PDF..."
-                            value={strVal}
-                            onChange={(e) =>
-                              handleFieldValueChange(fieldKey, e.target.value)
+                        {/* Sisi Kanan: Action Buttons */}
+                        <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() =>
+                              handleOpenFileFieldPreview(fieldKey, field.label)
                             }
-                            className="text-xs h-8"
-                          />
-                        )}
+                            className="h-7 text-xs text-primary px-2"
+                            title="Buka / Preview"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </Button>
 
-                        <div className="flex items-center gap-3">
-                          <label className="cursor-pointer">
-                            <input
-                              type="file"
-                              className="hidden"
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) {
-                                  handleUploadAttachment(fieldKey, file);
-                                }
-                              }}
-                            />
-                            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-input bg-background hover:bg-muted text-xs font-medium w-fit">
-                              <UploadCloud className="w-3.5 h-3.5 text-primary" />
-                              Unggah Dokumen / Bukti
-                            </div>
-                          </label>
-                          {field.evidenceRequired && (
-                            <span className="text-[11px] text-rose-500 font-semibold">
-                              * Lampiran dokumen wajib
-                            </span>
+                          {isEditable && (
+                            <>
+                              <div>
+                                <input
+                                  id={`upload-doc-change-${field.id}`}
+                                  type="file"
+                                  accept=".pdf,application/pdf"
+                                  className="hidden"
+                                  disabled={isUploading}
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                      handleUploadAttachment(fieldKey, file, false);
+                                      e.target.value = "";
+                                    }
+                                  }}
+                                />
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  disabled={isUploading}
+                                  onClick={() => document.getElementById(`upload-doc-change-${field.id}`)?.click()}
+                                  className="flex items-center gap-1 h-7 px-2 text-xs font-medium text-muted-foreground hover:text-foreground cursor-pointer"
+                                  title="Ganti Dokumen (Unggah PDF ke S3)"
+                                >
+                                  {isUploading ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+                                  ) : (
+                                    <>
+                                      <UploadCloud className="w-3.5 h-3.5" />
+                                      <span className="hidden sm:inline">Ganti</span>
+                                    </>
+                                  )}
+                                </Button>
+                              </div>
+
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleRemoveAttachment(fieldKey)}
+                                className="h-7 text-xs text-destructive px-2 opacity-70 hover:opacity-100"
+                                title="Hapus dokumen"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </Button>
+                            </>
                           )}
                         </div>
                       </div>
+                    ) : (
+                      /* Belum ada dokumen terunggah */
+                      isEditable && (
+                        <div className="flex items-center gap-3">
+                          <div>
+                            <input
+                              id={`upload-doc-new-${field.id}`}
+                              type="file"
+                              accept=".pdf,application/pdf"
+                              className="hidden"
+                              disabled={isUploading}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  handleUploadAttachment(fieldKey, file, false);
+                                  e.target.value = "";
+                                }
+                              }}
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={isUploading}
+                              onClick={() => document.getElementById(`upload-doc-new-${field.id}`)?.click()}
+                              className="flex items-center gap-1.5 px-3 py-1.5 h-auto rounded-md border border-input bg-background hover:bg-muted text-xs font-medium w-fit shadow-xs cursor-pointer"
+                            >
+                              {isUploading ? (
+                                <>
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+                                  Mengunggah...
+                                </>
+                              ) : (
+                                <>
+                                  <UploadCloud className="w-3.5 h-3.5 text-primary" />
+                                  Unggah Dokumen PDF
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                          {field.evidenceRequired ? (
+                            <span className="text-[11px] text-rose-500 font-semibold">
+                              * Dokumen PDF wajib diunggah
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-muted-foreground">
+                              Hanya format PDF (.pdf)
+                            </span>
+                          )}
+                        </div>
+                      )
                     )}
 
-                    {/* List of uploaded attachments */}
-                    {evidenceMap[fieldKey] &&
-                      evidenceMap[fieldKey].length > 0 && (
-                        <div className="space-y-1 pt-1">
-                          {evidenceMap[fieldKey].map((att) => (
-                            <div
-                              key={att.id}
-                              className="flex items-center justify-between p-2 rounded border bg-muted/40 text-xs max-w-md"
-                            >
-                              <div className="flex items-center gap-2 truncate">
-                                <FileText className="w-4 h-4 text-primary shrink-0" />
-                                <span className="truncate font-medium">
-                                  {att.name}
-                                </span>
-                                <span className="text-[10px] text-muted-foreground shrink-0">
-                                  ({(att.size / 1024).toFixed(0)} KB)
-                                </span>
-                              </div>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => handlePreviewAttachment(att)}
-                                className="h-7 text-xs text-primary"
-                              >
-                                <ExternalLink className="w-3 h-3 mr-1" />
-                                Buka
-                              </Button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                    {/* Upload error message */}
+                    {uploadError && (
+                      <p className="text-[11px] font-medium text-rose-600 dark:text-rose-400 flex items-center gap-1">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                        {uploadError}
+                      </p>
+                    )}
                   </div>
                 );
               })()}

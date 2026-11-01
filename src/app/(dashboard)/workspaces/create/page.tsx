@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
+import { Field, FieldLabel, FieldGroup, FieldError } from "@/components/ui/field";
 import {
   Select,
   SelectContent,
@@ -102,88 +102,90 @@ export default function CreateWorkspacePage() {
               </div>
             )}
 
-            <div className="space-y-1.5">
-              <Label htmlFor="name" className="text-xs">
-                Nama Kegiatan <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="name"
-                placeholder="Contoh: Pelatihan Digital Marketing 2026"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                className="text-xs"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="startDate" className="text-xs">
-                  Tanggal Mulai <span className="text-destructive">*</span>
-                </Label>
+            <FieldGroup className="gap-4">
+              <Field className="space-y-1.5">
+                <FieldLabel htmlFor="name" className="text-xs">
+                  Nama Kegiatan <span className="text-destructive">*</span>
+                </FieldLabel>
                 <Input
-                  id="startDate"
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
+                  id="name"
+                  placeholder="Contoh: Pelatihan Digital Marketing 2026"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
                   required
                   className="text-xs"
                 />
+              </Field>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Field className="space-y-1.5">
+                  <FieldLabel htmlFor="startDate" className="text-xs">
+                    Tanggal Mulai <span className="text-destructive">*</span>
+                  </FieldLabel>
+                  <Input
+                    id="startDate"
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    required
+                    className="text-xs"
+                  />
+                </Field>
+
+                <Field className="space-y-1.5">
+                  <FieldLabel htmlFor="endDate" className="text-xs">
+                    Tanggal Selesai <span className="text-destructive">*</span>
+                  </FieldLabel>
+                  <Input
+                    id="endDate"
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    required
+                    className="text-xs"
+                  />
+                </Field>
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="endDate" className="text-xs">
-                  Tanggal Selesai <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="endDate"
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  required
+              <Field className="space-y-1.5">
+                <FieldLabel htmlFor="template" className="text-xs">
+                  Template Form Bawaan (Opsional)
+                </FieldLabel>
+                <Select
+                  value={templateId}
+                  onValueChange={(val) => setTemplateId(val === "none" ? "" : (val ?? ""))}
+                >
+                  <SelectTrigger id="template" className="w-full text-xs">
+                    <SelectValue placeholder="-- Pilih Template Form --" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">-- Tanpa Template (Bawaan) --</SelectItem>
+                    {templates.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.name} ({t.items.length} field form)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground">
+                  Jika tidak memilih, template form pertama akan digunakan secara otomatis.
+                </p>
+              </Field>
+
+              <Field className="space-y-1.5">
+                <FieldLabel htmlFor="desc" className="text-xs">
+                  Deskripsi Kegiatan
+                </FieldLabel>
+                <Textarea
+                  id="desc"
+                  placeholder="Tuliskan keterangan singkat mengenai kegiatan ini..."
+                  rows={3}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
                   className="text-xs"
                 />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="template" className="text-xs">
-                Template Form Bawaan (Opsional)
-              </Label>
-              <Select
-                value={templateId}
-                onValueChange={(val) => setTemplateId(val === "none" ? "" : (val ?? ""))}
-              >
-                <SelectTrigger id="template" className="w-full text-xs">
-                  <SelectValue placeholder="-- Pilih Template Form --" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">-- Tanpa Template (Bawaan) --</SelectItem>
-                  {templates.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>
-                      {t.name} ({t.items.length} field form)
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-[11px] text-muted-foreground">
-                Jika tidak memilih, template form pertama akan digunakan secara otomatis.
-              </p>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="desc" className="text-xs">
-                Deskripsi Kegiatan
-              </Label>
-              <Textarea
-                id="desc"
-                placeholder="Tuliskan keterangan singkat mengenai kegiatan ini..."
-                rows={3}
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                className="text-xs"
-              />
-            </div>
+              </Field>
+            </FieldGroup>
           </CardContent>
 
           <CardFooter className="flex justify-end gap-2 border-t border-border pt-4">

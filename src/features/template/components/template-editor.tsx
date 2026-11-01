@@ -8,7 +8,7 @@ import { FormField, FormTemplate } from "@/types/domain";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
+import { Field, FieldLabel, FieldGroup } from "@/components/ui/field";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
 import {
@@ -439,93 +439,95 @@ export function TemplateEditor({ templateId }: TemplateEditorProps) {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="tpl-name" className="text-xs">
-              Nama Template <span className="text-destructive">*</span>
-            </Label>
-            <Input
-              id="tpl-name"
-              placeholder="Contoh: Formulir Pendaftaran & Data Peserta"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="text-xs"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="tpl-desc" className="text-xs">
-              Deskripsi Template (Opsional)
-            </Label>
-            <Textarea
-              id="tpl-desc"
-              placeholder="Jelaskan peruntukan template ini..."
-              rows={2}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="text-xs"
-            />
-          </div>
+          <FieldGroup className="gap-4">
+            <Field className="space-y-1.5">
+              <FieldLabel htmlFor="tpl-name" className="text-xs">
+                Nama Template <span className="text-destructive">*</span>
+              </FieldLabel>
+              <Input
+                id="tpl-name"
+                placeholder="Contoh: Formulir Pendaftaran & Data Peserta"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="text-xs"
+              />
+            </Field>
+            <Field className="space-y-1.5">
+              <FieldLabel htmlFor="tpl-desc" className="text-xs">
+                Deskripsi Template (Opsional)
+              </FieldLabel>
+              <Textarea
+                id="tpl-desc"
+                placeholder="Jelaskan peruntukan template ini..."
+                rows={2}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className="text-xs"
+              />
+            </Field>
 
-          {/* Kolom Contoh Excel untuk Mapping */}
-          <div className="pt-2 border-t border-border/60 space-y-2">
-            <div className="flex items-center justify-between">
-              <div>
-                <Label className="text-xs font-semibold">Daftar Kolom Excel yang Tersedia</Label>
-                <p className="text-[11px] text-muted-foreground">
-                  Nama header kolom dari Excel (misal: Foto, NIK, Nama, Omset). Memudahkan mapping ke field di bawah.
-                </p>
+            {/* Kolom Contoh Excel untuk Mapping */}
+            <Field className="pt-2 border-t border-border/60 space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <FieldLabel className="text-xs font-semibold">Daftar Kolom Excel yang Tersedia</FieldLabel>
+                  <p className="text-[11px] text-muted-foreground">
+                    Nama header kolom dari Excel (misal: Foto, NIK, Nama, Omset). Memudahkan mapping ke field di bawah.
+                  </p>
+                </div>
               </div>
-            </div>
 
-            <div className="flex flex-wrap gap-1.5 items-center">
-              {sampleColumns.map((col) => (
-                <span
-                  key={col}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-secondary text-secondary-foreground text-xs font-medium"
-                >
-                  {col}
-                  <button
-                    type="button"
-                    onClick={() => setSampleColumns(sampleColumns.filter((c) => c !== col))}
-                    className="text-muted-foreground hover:text-destructive"
+              <div className="flex flex-wrap gap-1.5 items-center">
+                {sampleColumns.map((col) => (
+                  <span
+                    key={col}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-secondary text-secondary-foreground text-xs font-medium"
                   >
-                    ×
-                  </button>
-                </span>
-              ))}
+                    {col}
+                    <button
+                      type="button"
+                      onClick={() => setSampleColumns(sampleColumns.filter((c) => c !== col))}
+                      className="text-muted-foreground hover:text-destructive"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
 
-              <div className="flex items-center gap-1.5 mt-1 sm:mt-0">
-                <Input
-                  placeholder="Tambah nama kolom..."
-                  value={newColumnInput}
-                  onChange={(e) => setNewColumnInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && newColumnInput.trim()) {
-                      e.preventDefault();
-                      if (!sampleColumns.includes(newColumnInput.trim())) {
-                        setSampleColumns([...sampleColumns, newColumnInput.trim()]);
+                <div className="flex items-center gap-1.5 mt-1 sm:mt-0">
+                  <Input
+                    placeholder="Tambah nama kolom..."
+                    value={newColumnInput}
+                    onChange={(e) => setNewColumnInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && newColumnInput.trim()) {
+                        e.preventDefault();
+                        if (!sampleColumns.includes(newColumnInput.trim())) {
+                          setSampleColumns([...sampleColumns, newColumnInput.trim()]);
+                        }
+                        setNewColumnInput("");
                       }
-                      setNewColumnInput("");
-                    }
-                  }}
-                  className="text-xs h-7 w-44"
-                />
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  className="h-7 text-xs px-2"
-                  onClick={() => {
-                    if (newColumnInput.trim() && !sampleColumns.includes(newColumnInput.trim())) {
-                      setSampleColumns([...sampleColumns, newColumnInput.trim()]);
-                      setNewColumnInput("");
-                    }
-                  }}
-                >
-                  Tambah
-                </Button>
+                    }}
+                    className="text-xs h-7 w-44"
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="h-7 text-xs px-2"
+                    onClick={() => {
+                      if (newColumnInput.trim() && !sampleColumns.includes(newColumnInput.trim())) {
+                        setSampleColumns([...sampleColumns, newColumnInput.trim()]);
+                        setNewColumnInput("");
+                      }
+                    }}
+                  >
+                    Tambah
+                  </Button>
+                </div>
               </div>
-            </div>
-          </div>
+            </Field>
+          </FieldGroup>
         </CardContent>
       </Card>
 

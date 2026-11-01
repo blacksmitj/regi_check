@@ -1,13 +1,22 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api/client";
 import { FormField, Participant } from "@/types/domain";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import Link from "next/link";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   ArrowLeft,
   Save,
@@ -21,6 +30,7 @@ import {
   ChevronDown,
   Loader2,
   FolderTree,
+  AlertTriangle,
 } from "lucide-react";
 import {
   Dialog,
@@ -33,6 +43,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Field, FieldLabel, FieldGroup } from "@/components/ui/field";
 import { Switch } from "@/components/ui/switch";
 import {
   DropdownMenu,
@@ -102,11 +113,49 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
   // Apply Template Modal State
   const [applyTemplateDialogOpen, setApplyTemplateDialogOpen] = useState(false);
 
+  // Unsaved changes guard
+  const [unsavedDialogOpen, setUnsavedDialogOpen] = useState(false);
+  const pendingNavRef = useRef<string | null>(null);
+
+  // Track whether items have been initialized from server at least once
+  const initializedRef = useRef(false);
+
   useEffect(() => {
-    if (initialItems.length > 0) {
+    if (initialItems.length > 0 && !initializedRef.current) {
       setItems([...initialItems]);
+      initializedRef.current = true;
     }
   }, [initialItems]);
+
+  // Detect unsaved changes by comparing current items with server state
+  const isDirty = useMemo(() => {
+    if (!initializedRef.current) return false;
+    if (items.length !== initialItems.length) return true;
+    return JSON.stringify(items) !== JSON.stringify(initialItems);
+  }, [items, initialItems]);
+
+  // Browser-level guard: warn on refresh / tab close
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (isDirty) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [isDirty]);
+
+  // Navigation guard: intercept back button and show confirmation dialog
+  const handleBack = () => {
+    const target = `/workspaces/${workspaceId}`;
+    if (isDirty) {
+      pendingNavRef.current = target;
+      setUnsavedDialogOpen(true);
+    } else {
+      router.push(target);
+    }
+  };
 
   // Extract unique columns from participant data (prioritizes workspace.importHeaders order if available)
   const { availableColumnsList, availableColumnNames } = useMemo(() => {
@@ -155,11 +204,20 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
   const saveMutation = useMutation({
     mutationFn: (updatedItems: FormField[]) =>
       api.saveWorkspaceForm(workspaceId, updatedItems),
-    onSuccess: () => {
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ["workspaceForm", workspaceId] });
       queryClient.invalidateQueries({ queryKey: ["workspaceChecklist", workspaceId] });
       setIsSavedNotice(true);
       setTimeout(() => setIsSavedNotice(false), 3000);
+
+      // Auto-sync: jika workspace punya template terhubung, perbarui template sekalian
+      if (associatedTemplate) {
+        try {
+          await updateExistingTemplateMutation.mutateAsync();
+        } catch {
+          // Gagal sync template tidak membatalkan save form
+        }
+      }
     },
   });
 
@@ -702,11 +760,9 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
         {/* Top Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-4">
           <div className="flex items-center gap-3">
-            <Link href={`/workspaces/${workspaceId}`}>
-              <Button variant="ghost" size="icon">
-                <ArrowLeft className="w-4 h-4" />
-              </Button>
-            </Link>
+            <Button variant="ghost" size="icon" onClick={handleBack}>
+              <ArrowLeft className="w-4 h-4" />
+            </Button>
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-xl font-bold tracking-tight">Atur Form Workspace</h1>
@@ -985,12 +1041,15 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
       <div className="fixed bottom-0 inset-x-0 z-30 w-full border-t border-border bg-background/95 backdrop-blur-md shadow-lg">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            <Link href={`/workspaces/${workspaceId}`}>
-              <Button variant="ghost" size="sm" className="gap-1.5 text-xs text-muted-foreground hover:text-foreground">
-                <ArrowLeft className="w-4 h-4" />
-                <span className="hidden sm:inline">Kembali</span>
-              </Button>
-            </Link>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleBack}
+              className="gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span className="hidden sm:inline">Kembali</span>
+            </Button>
 
             <div className="h-4 w-px bg-border hidden sm:block" />
 
@@ -1010,6 +1069,12 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
               <span className="text-xs font-medium text-emerald-600 flex items-center gap-1 animate-in fade-in">
                 <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
                 <span className="truncate">Perubahan Form Tersimpan!</span>
+              </span>
+            )}
+            {isDirty && !isSavedNotice && !templateSavedNotice && (
+              <span className="text-xs font-medium text-amber-600 flex items-center gap-1 animate-in fade-in">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden sm:inline truncate">Ada perubahan belum disimpan</span>
               </span>
             )}
           </div>
@@ -1132,32 +1197,34 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
           </DialogHeader>
 
           <div className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="tpl-name" className="text-xs font-semibold">
-                Nama Master Template <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="tpl-name"
-                value={templateName}
-                onChange={(e) => setTemplateName(e.target.value)}
-                placeholder="Contoh: Form Registrasi Standar Peserta"
-                className="text-xs"
-              />
-            </div>
+            <FieldGroup className="gap-4">
+              <Field className="space-y-1.5">
+                <FieldLabel htmlFor="tpl-name" className="text-xs font-semibold">
+                  Nama Master Template <span className="text-destructive">*</span>
+                </FieldLabel>
+                <Input
+                  id="tpl-name"
+                  value={templateName}
+                  onChange={(e) => setTemplateName(e.target.value)}
+                  placeholder="Contoh: Form Registrasi Standar Peserta"
+                  className="text-xs"
+                />
+              </Field>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="tpl-desc" className="text-xs font-semibold">
-                Deskripsi Singkat (Opsional)
-              </Label>
-              <Textarea
-                id="tpl-desc"
-                value={templateDesc}
-                onChange={(e) => setTemplateDesc(e.target.value)}
-                placeholder="Catatan tujuan atau petunjuk pemakaian template..."
-                rows={3}
-                className="text-xs"
-              />
-            </div>
+              <Field className="space-y-1.5">
+                <FieldLabel htmlFor="tpl-desc" className="text-xs font-semibold">
+                  Deskripsi Singkat (Opsional)
+                </FieldLabel>
+                <Textarea
+                  id="tpl-desc"
+                  value={templateDesc}
+                  onChange={(e) => setTemplateDesc(e.target.value)}
+                  placeholder="Catatan tujuan atau petunjuk pemakaian template..."
+                  rows={3}
+                  className="text-xs"
+                />
+              </Field>
+            </FieldGroup>
 
             <div className="p-3 bg-muted/60 rounded-md border text-[11px] text-muted-foreground space-y-1">
               <p className="font-semibold text-foreground">Ringkasan Konfigurasi:</p>
@@ -1210,6 +1277,36 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
         currentTemplateId={workspace?.templateId}
         onApplyTemplate={handleApplyTemplate}
       />
+
+      {/* Unsaved Changes Guard Dialog */}
+      <AlertDialog open={unsavedDialogOpen} onOpenChange={setUnsavedDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-500" />
+              Perubahan Belum Disimpan
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Ada perubahan pada konfigurasi form yang belum disimpan. Jika kamu kembali sekarang, semua perubahan akan hilang.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => { pendingNavRef.current = null; }}>
+              Tetap di Sini
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                const target = pendingNavRef.current;
+                pendingNavRef.current = null;
+                if (target) router.push(target);
+              }}
+            >
+              Keluar Tanpa Menyimpan
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

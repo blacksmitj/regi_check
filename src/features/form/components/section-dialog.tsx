@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Field, FieldLabel, FieldGroup } from "@/components/ui/field";
 import { Textarea } from "@/components/ui/textarea";
 import { FolderKanban, Trash2 } from "lucide-react";
 
@@ -71,34 +71,36 @@ export function SectionDialog({
           </DialogHeader>
 
           <div className="py-4 space-y-3.5">
-            <div className="space-y-1.5">
-              <Label htmlFor="sec-label" className="text-xs font-semibold">
-                Judul Section / Group <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="sec-label"
-                value={label}
-                onChange={(e) => setLabel(e.target.value)}
-                placeholder="Contoh: Identitas & Dokumen Peserta"
-                className="text-xs h-9 font-medium"
-                autoFocus
-                required
-              />
-            </div>
+            <FieldGroup className="gap-3.5">
+              <Field className="space-y-1.5">
+                <FieldLabel htmlFor="sec-label" className="text-xs font-semibold">
+                  Judul Section / Group <span className="text-destructive">*</span>
+                </FieldLabel>
+                <Input
+                  id="sec-label"
+                  value={label}
+                  onChange={(e) => setLabel(e.target.value)}
+                  placeholder="Contoh: Identitas & Dokumen Peserta"
+                  className="text-xs h-9 font-medium"
+                  autoFocus
+                  required
+                />
+              </Field>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="sec-desc" className="text-xs font-semibold">
-                Deskripsi / Petunjuk Pengisian (Opsional)
-              </Label>
-              <Textarea
-                id="sec-desc"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Keterangan singkat tentang grup pertanyaan ini..."
-                rows={3}
-                className="text-xs resize-none"
-              />
-            </div>
+              <Field className="space-y-1.5">
+                <FieldLabel htmlFor="sec-desc" className="text-xs font-semibold">
+                  Deskripsi / Petunjuk Pengisian (Opsional)
+                </FieldLabel>
+                <Textarea
+                  id="sec-desc"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Keterangan singkat tentang grup pertanyaan ini..."
+                  rows={3}
+                  className="text-xs resize-none"
+                />
+              </Field>
+            </FieldGroup>
           </div>
 
           <DialogFooter className="flex-row items-center justify-between sm:justify-between gap-2 border-t pt-3">

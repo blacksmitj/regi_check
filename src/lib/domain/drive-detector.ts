@@ -66,7 +66,11 @@ export function isImageUrl(url: string): boolean {
  */
 export function isPdfUrl(url: string): boolean {
   if (!url || typeof url !== "string") return false;
-  return /\.pdf(\?.*)?$/i.test(url);
+  const clean = url.trim();
+  if (/^data:application\/pdf/i.test(clean)) return true;
+  if (/^JVBERi0/i.test(clean)) return true;
+  if (/^blob:/i.test(clean) && clean.includes("pdf")) return true;
+  return /\.pdf(\?.*)?$/i.test(clean);
 }
 
 /**

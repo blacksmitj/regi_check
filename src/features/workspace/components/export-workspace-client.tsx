@@ -9,6 +9,7 @@ import Link from "next/link";
 import * as XLSX from "xlsx";
 import { Download, ArrowLeft, CheckCircle2, FileSpreadsheet, LayoutList } from "lucide-react";
 import { ParticipantStatus, OfficerHistoryItem } from "@/types/domain";
+import { Field, FieldLabel, FieldGroup } from "@/components/ui/field";
 
 type ExportColumnMode = "import_order" | "form_order";
 
@@ -139,6 +140,22 @@ export function ExportWorkspaceClient({ workspaceId }: { workspaceId: string }) 
     return rawKey;
   };
 
+  // Helper untuk format nilai cell agar aman dan tidak melebihi batas 32.767 karakter Excel
+  const formatCellValue = (val: unknown): string => {
+    if (val === undefined || val === null) return "-";
+    const str = String(val).trim();
+    if (str === "") return "-";
+    // Jika berupa base64 data URI (misal foto/dokumen/tanda tangan base64)
+    if (str.startsWith("data:image/") || str.startsWith("data:application/")) {
+      return "[File/Gambar]";
+    }
+    // Batas karakter sel Excel adalah 32.767 karakter
+    if (str.length > 32767) {
+      return str.slice(0, 32764) + "...";
+    }
+    return str;
+  };
+
   const handleExportExcel = () => {
     const exportRows = filtered.map((p) => {
       const row: Record<string, unknown> = {};
@@ -199,7 +216,7 @@ export function ExportWorkspaceClient({ workspaceId }: { workspaceId: string }) 
         importOriginalKeys.forEach((key) => {
           const columnHeader = resolveColumnTitle(key);
           const val = p.data[key];
-          row[columnHeader] = val !== undefined && val !== null && String(val).trim() !== "" ? String(val) : "-";
+          row[columnHeader] = formatCellValue(val);
           addedHeaders.add(columnHeader);
         });
 
@@ -207,8 +224,7 @@ export function ExportWorkspaceClient({ workspaceId }: { workspaceId: string }) 
         activeSortedFormFields.forEach((field) => {
           if (!addedHeaders.has(field.label)) {
             const val = resolveFieldValue(p.data, field);
-            const formattedVal = val !== undefined && val !== null && String(val).trim() !== "" ? String(val) : "-";
-            row[field.label] = formattedVal;
+            row[field.label] = formatCellValue(val);
             addedHeaders.add(field.label);
           }
         });
@@ -217,24 +233,23 @@ export function ExportWorkspaceClient({ workspaceId }: { workspaceId: string }) 
         row["Status"] = statusText;
 
         // Kolom validasi info petugas di paling belakang
-        row["Terakhir Diubah Oleh"] = lastUpdatedBy;
-        row["Waktu Update Terakhir"] = lastUpdatedAtFormatted;
-        row["Riwayat Petugas (Awal - Akhir)"] = historyFormatted;
+        row["Terakhir Diubah Oleh"] = formatCellValue(lastUpdatedBy);
+        row["Waktu Update Terakhir"] = formatCellValue(lastUpdatedAtFormatted);
+        row["Riwayat Petugas (Awal - Akhir)"] = formatCellValue(historyFormatted);
       } else {
         // Mode 2: Murni sesuai urutan atur form workspace
         activeSortedFormFields.forEach((field) => {
           const val = resolveFieldValue(p.data, field);
-          const formattedVal = val !== undefined && val !== null && String(val).trim() !== "" ? String(val) : "-";
-          row[field.label] = formattedVal;
+          row[field.label] = formatCellValue(val);
         });
 
         // Kolom status registrasi
         row["Status"] = statusText;
 
         // Kolom validasi info petugas di paling belakang
-        row["Terakhir Diubah Oleh"] = lastUpdatedBy;
-        row["Waktu Update Terakhir"] = lastUpdatedAtFormatted;
-        row["Riwayat Petugas (Awal - Akhir)"] = historyFormatted;
+        row["Terakhir Diubah Oleh"] = formatCellValue(lastUpdatedBy);
+        row["Waktu Update Terakhir"] = formatCellValue(lastUpdatedAtFormatted);
+        row["Riwayat Petugas (Awal - Akhir)"] = formatCellValue(historyFormatted);
       }
 
       return row;
@@ -277,91 +292,93 @@ export function ExportWorkspaceClient({ workspaceId }: { workspaceId: string }) 
         </CardHeader>
 
         <CardContent className="space-y-6">
-          {/* Pilihan Susunan Urutan Kolom */}
-          <div className="space-y-2.5">
-            <label className="text-xs font-semibold text-foreground">Susunan Urutan Kolom:</label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div
-                onClick={() => setColumnMode("import_order")}
-                className={`p-3.5 rounded-lg border cursor-pointer transition-all flex flex-col justify-between ${
-                  columnMode === "import_order"
-                    ? "border-primary bg-primary/5 ring-1 ring-primary"
-                    : "border-border hover:bg-muted/40"
-                }`}
-              >
-                <div className="flex items-start gap-2.5">
-                  <FileSpreadsheet className={`w-4 h-4 mt-0.5 shrink-0 ${columnMode === "import_order" ? "text-primary" : "text-muted-foreground"}`} />
-                  <div>
-                    <p className="text-xs font-semibold text-foreground">Sesuai Urutan Import Asli</p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
-                      Menampilkan semua kolom tabel Excel sesuai urutan ketika di-import, ditambah status & informasi validasi petugas di akhir.
-                    </p>
-                  </div>
-                </div>
-                <div className="mt-2.5 pt-2 border-t border-border/50 text-[10px] text-muted-foreground">
-                  {importOriginalKeys.length} kolom import terdeteksi + validasi info
-                </div>
-              </div>
-
-              <div
-                onClick={() => setColumnMode("form_order")}
-                className={`p-3.5 rounded-lg border cursor-pointer transition-all flex flex-col justify-between ${
-                  columnMode === "form_order"
-                    ? "border-primary bg-primary/5 ring-1 ring-primary"
-                    : "border-border hover:bg-muted/40"
-                }`}
-              >
-                <div className="flex items-start gap-2.5">
-                  <LayoutList className={`w-4 h-4 mt-0.5 shrink-0 ${columnMode === "form_order" ? "text-primary" : "text-muted-foreground"}`} />
-                  <div>
-                    <p className="text-xs font-semibold text-foreground">Sesuai Urutan Atur Form Workspace</p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
-                      Murni mengikuti urutan susunan field form yang diatur di Form Settings, ditambah status & informasi validasi petugas di akhir.
-                    </p>
-                  </div>
-                </div>
-                <div className="mt-2.5 pt-2 border-t border-border/50 text-[10px] text-muted-foreground">
-                  {activeSortedFormFields.length} field form aktif + validasi info
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-xs font-semibold text-foreground">Filter Kelayakan Peserta:</label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {[
-                { id: "all", label: "Semua Peserta", count: participants.length },
-                {
-                  id: "complete",
-                  label: "Hanya Lengkap",
-                  count: participants.filter((p) => p.status === "complete").length,
-                },
-                {
-                  id: "incomplete",
-                  label: "Belum Lengkap",
-                  count: participants.filter((p) => p.status === "incomplete").length,
-                },
-                {
-                  id: "rejected",
-                  label: "Ditolak",
-                  count: participants.filter((p) => p.status === "rejected").length,
-                },
-              ].map((tab) => (
+          <FieldGroup className="gap-6">
+            {/* Pilihan Susunan Urutan Kolom */}
+            <Field className="gap-2.5">
+              <FieldLabel className="text-xs font-semibold text-foreground">Susunan Urutan Kolom:</FieldLabel>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
                 <div
-                  key={tab.id}
-                  onClick={() => setFilterStatus(tab.id as typeof filterStatus)}
-                  className={`p-3 rounded-lg border text-center cursor-pointer transition-all ${filterStatus === tab.id
-                      ? "border-primary bg-primary/10 ring-1 ring-primary"
+                  onClick={() => setColumnMode("import_order")}
+                  className={`p-3.5 rounded-lg border cursor-pointer transition-all flex flex-col justify-between ${
+                    columnMode === "import_order"
+                      ? "border-primary bg-primary/5 ring-1 ring-primary"
                       : "border-border hover:bg-muted/40"
-                    }`}
+                  }`}
                 >
-                  <p className="text-xs font-semibold text-foreground">{tab.label}</p>
-                  <p className="text-sm font-bold text-muted-foreground mt-0.5">{tab.count} Orang</p>
+                  <div className="flex items-start gap-2.5">
+                    <FileSpreadsheet className={`w-4 h-4 mt-0.5 shrink-0 ${columnMode === "import_order" ? "text-primary" : "text-muted-foreground"}`} />
+                    <div>
+                      <p className="text-xs font-semibold text-foreground">Sesuai Urutan Import Asli</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                        Menampilkan semua kolom tabel Excel sesuai urutan ketika di-import, ditambah status & informasi validasi petugas di akhir.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-2.5 pt-2 border-t border-border/50 text-[10px] text-muted-foreground">
+                    {importOriginalKeys.length} kolom import terdeteksi + validasi info
+                  </div>
                 </div>
-              ))}
-            </div>
-          </div>
+
+                <div
+                  onClick={() => setColumnMode("form_order")}
+                  className={`p-3.5 rounded-lg border cursor-pointer transition-all flex flex-col justify-between ${
+                    columnMode === "form_order"
+                      ? "border-primary bg-primary/5 ring-1 ring-primary"
+                      : "border-border hover:bg-muted/40"
+                  }`}
+                >
+                  <div className="flex items-start gap-2.5">
+                    <LayoutList className={`w-4 h-4 mt-0.5 shrink-0 ${columnMode === "form_order" ? "text-primary" : "text-muted-foreground"}`} />
+                    <div>
+                      <p className="text-xs font-semibold text-foreground">Sesuai Urutan Atur Form Workspace</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                        Murni mengikuti urutan susunan field form yang diatur di Form Settings, ditambah status & informasi validasi petugas di akhir.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-2.5 pt-2 border-t border-border/50 text-[10px] text-muted-foreground">
+                    {activeSortedFormFields.length} field form aktif + validasi info
+                  </div>
+                </div>
+              </div>
+            </Field>
+
+            <Field className="gap-2">
+              <FieldLabel className="text-xs font-semibold text-foreground">Filter Kelayakan Peserta:</FieldLabel>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full">
+                {[
+                  { id: "all", label: "Semua Peserta", count: participants.length },
+                  {
+                    id: "complete",
+                    label: "Hanya Lengkap",
+                    count: participants.filter((p) => p.status === "complete").length,
+                  },
+                  {
+                    id: "incomplete",
+                    label: "Belum Lengkap",
+                    count: participants.filter((p) => p.status === "incomplete").length,
+                  },
+                  {
+                    id: "rejected",
+                    label: "Ditolak",
+                    count: participants.filter((p) => p.status === "rejected").length,
+                  },
+                ].map((tab) => (
+                  <div
+                    key={tab.id}
+                    onClick={() => setFilterStatus(tab.id as typeof filterStatus)}
+                    className={`p-3 rounded-lg border text-center cursor-pointer transition-all ${filterStatus === tab.id
+                        ? "border-primary bg-primary/10 ring-1 ring-primary"
+                        : "border-border hover:bg-muted/40"
+                      }`}
+                  >
+                    <p className="text-xs font-semibold text-foreground">{tab.label}</p>
+                    <p className="text-sm font-bold text-muted-foreground mt-0.5">{tab.count} Orang</p>
+                  </div>
+                ))}
+              </div>
+            </Field>
+          </FieldGroup>
 
           <div className="p-4 rounded-xl bg-muted/30 border border-border flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>

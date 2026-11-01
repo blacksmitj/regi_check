@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { api } from "@/lib/api/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Field, FieldLabel, FieldGroup, FieldDescription } from "@/components/ui/field";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { WorkspaceConfirmationDialog } from "./workspace-confirmation-dialog";
@@ -134,121 +134,123 @@ export function WorkspaceGeneralSettingsClient({ workspaceId }: { workspaceId: s
         </CardHeader>
         <CardContent className="p-5">
           <form onSubmit={handleSave} className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="ws-name" className="text-xs font-semibold">Nama Workspace / Acara</Label>
-              <Input
-                id="ws-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Contoh: Registrasi Seminar Nasional 2026"
-                required
-                className="text-xs h-9"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="ws-desc" className="text-xs font-semibold">Deskripsi</Label>
-              <Textarea
-                id="ws-desc"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Catatan atau keterangan kegiatan..."
-                rows={3}
-                className="text-xs"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="ws-start" className="text-xs font-semibold flex items-center gap-1.5">
-                  <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
-                  Tanggal Mulai
-                </Label>
+            <FieldGroup className="gap-4">
+              <Field className="space-y-1.5">
+                <FieldLabel htmlFor="ws-name" className="text-xs font-semibold">Nama Workspace / Acara</FieldLabel>
                 <Input
-                  id="ws-start"
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
+                  id="ws-name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Contoh: Registrasi Seminar Nasional 2026"
                   required
                   className="text-xs h-9"
                 />
-              </div>
+              </Field>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="ws-end" className="text-xs font-semibold flex items-center gap-1.5">
-                  <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
-                  Tanggal Selesai
-                </Label>
-                <Input
-                  id="ws-end"
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  required
-                  className="text-xs h-9"
+              <Field className="space-y-1.5">
+                <FieldLabel htmlFor="ws-desc" className="text-xs font-semibold">Deskripsi</FieldLabel>
+                <Textarea
+                  id="ws-desc"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Catatan atau keterangan kegiatan..."
+                  rows={3}
+                  className="text-xs"
                 />
-              </div>
-            </div>
+              </Field>
 
-            {/* Pemetaan Kolom Profil Peserta */}
-            <div className="pt-4 border-t border-border/60 space-y-3">
-              <div>
-                <h3 className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                  <KeyRound className="w-3.5 h-3.5 text-primary" />
-                  Pemetaan Kolom Identitas Peserta
-                </h3>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Tentukan nama kolom dari berkas import yang dijadikan acuan NIK/ID unik, nama, dan foto pada kartu profil peserta.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-muted/30 p-3 rounded-lg border border-border/60">
-                <div className="space-y-1">
-                  <Label htmlFor="ws-uniquekey" className="text-[11px] font-semibold flex items-center gap-1">
-                    <KeyRound className="w-3 h-3 text-primary" />
-                    Kolom Kunci ID Unik
-                  </Label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Field className="space-y-1.5">
+                  <FieldLabel htmlFor="ws-start" className="text-xs font-semibold flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
+                    Tanggal Mulai
+                  </FieldLabel>
                   <Input
-                    id="ws-uniquekey"
-                    value={uniqueKeyColumn}
-                    onChange={(e) => setUniqueKeyColumn(e.target.value)}
-                    placeholder="Contoh: NIK, NIM, ID"
-                    className="text-xs h-8 bg-background"
+                    id="ws-start"
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    required
+                    className="text-xs h-9"
                   />
-                  <p className="text-[10px] text-muted-foreground">Header kolom unik di berkas peserta</p>
+                </Field>
+
+                <Field className="space-y-1.5">
+                  <FieldLabel htmlFor="ws-end" className="text-xs font-semibold flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
+                    Tanggal Selesai
+                  </FieldLabel>
+                  <Input
+                    id="ws-end"
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    required
+                    className="text-xs h-9"
+                  />
+                </Field>
+              </div>
+
+              {/* Pemetaan Kolom Profil Peserta */}
+              <div className="pt-4 border-t border-border/60 space-y-3">
+                <div>
+                  <h3 className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                    <KeyRound className="w-3.5 h-3.5 text-primary" />
+                    Pemetaan Kolom Identitas Peserta
+                  </h3>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    Tentukan nama kolom dari berkas import yang dijadikan acuan NIK/ID unik, nama, dan foto pada kartu profil peserta.
+                  </p>
                 </div>
 
-                <div className="space-y-1">
-                  <Label htmlFor="ws-namecol" className="text-[11px] font-semibold flex items-center gap-1">
-                    <User className="w-3 h-3 text-primary" />
-                    Kolom Nama Lengkap
-                  </Label>
-                  <Input
-                    id="ws-namecol"
-                    value={nameColumn}
-                    onChange={(e) => setNameColumn(e.target.value)}
-                    placeholder="Contoh: Nama Lengkap"
-                    className="text-xs h-8 bg-background"
-                  />
-                  <p className="text-[10px] text-muted-foreground">Header kolom nama di berkas peserta</p>
-                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-muted/30 p-3 rounded-lg border border-border/60">
+                  <Field className="space-y-1">
+                    <FieldLabel htmlFor="ws-uniquekey" className="text-[11px] font-semibold flex items-center gap-1">
+                      <KeyRound className="w-3 h-3 text-primary" />
+                      Kolom Kunci ID Unik
+                    </FieldLabel>
+                    <Input
+                      id="ws-uniquekey"
+                      value={uniqueKeyColumn}
+                      onChange={(e) => setUniqueKeyColumn(e.target.value)}
+                      placeholder="Contoh: NIK, NIM, ID"
+                      className="text-xs h-8 bg-background"
+                    />
+                    <FieldDescription className="text-[10px] text-muted-foreground">Header kolom unik di berkas peserta</FieldDescription>
+                  </Field>
 
-                <div className="space-y-1">
-                  <Label htmlFor="ws-photocol" className="text-[11px] font-semibold flex items-center gap-1">
-                    <ImageIcon className="w-3 h-3 text-primary" />
-                    Kolom Foto Avatar
-                  </Label>
-                  <Input
-                    id="ws-photocol"
-                    value={photoColumn}
-                    onChange={(e) => setPhotoColumn(e.target.value)}
-                    placeholder="Contoh: Foto, Link Foto"
-                    className="text-xs h-8 bg-background"
-                  />
-                  <p className="text-[10px] text-muted-foreground">Header kolom foto / link Google Drive</p>
+                  <Field className="space-y-1">
+                    <FieldLabel htmlFor="ws-namecol" className="text-[11px] font-semibold flex items-center gap-1">
+                      <User className="w-3 h-3 text-primary" />
+                      Kolom Nama Lengkap
+                    </FieldLabel>
+                    <Input
+                      id="ws-namecol"
+                      value={nameColumn}
+                      onChange={(e) => setNameColumn(e.target.value)}
+                      placeholder="Contoh: Nama Lengkap"
+                      className="text-xs h-8 bg-background"
+                    />
+                    <FieldDescription className="text-[10px] text-muted-foreground">Header kolom nama di berkas peserta</FieldDescription>
+                  </Field>
+
+                  <Field className="space-y-1">
+                    <FieldLabel htmlFor="ws-photocol" className="text-[11px] font-semibold flex items-center gap-1">
+                      <ImageIcon className="w-3 h-3 text-primary" />
+                      Kolom Foto Avatar
+                    </FieldLabel>
+                    <Input
+                      id="ws-photocol"
+                      value={photoColumn}
+                      onChange={(e) => setPhotoColumn(e.target.value)}
+                      placeholder="Contoh: Foto, Link Foto"
+                      className="text-xs h-8 bg-background"
+                    />
+                    <FieldDescription className="text-[10px] text-muted-foreground">Header kolom foto / link Google Drive</FieldDescription>
+                  </Field>
                 </div>
               </div>
-            </div>
+            </FieldGroup>
 
             <div className="flex items-center justify-between pt-2">
               <div>

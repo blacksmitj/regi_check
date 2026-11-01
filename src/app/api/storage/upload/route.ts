@@ -35,10 +35,10 @@ export async function POST(req: NextRequest) {
     try {
       await s3Client.send(command);
 
-      // Resolve public URL: Supabase Storage public format
-      const endpoint = process.env.S3_ENDPOINT || "https://nnemuqmiygworptowfnc.supabase.co/storage/v1/s3";
-      // Convert S3 endpoint to public object URL format
-      const supabaseBase = endpoint.replace("/storage/v1/s3", "");
+      // Resolve public URL using the configured S3_ENDPOINT
+      const s3Endpoint = process.env.S3_ENDPOINT || "https://nnemuqmiygworptowfnc.storage.supabase.co/storage/v1/s3";
+      // Supabase Storage public URL format: strip /s3 suffix, replace with /object/public/<bucket>/<key>
+      const supabaseBase = s3Endpoint.replace(/\/storage\/v1\/s3\/?$/, "");
       const publicUrl = `${supabaseBase}/storage/v1/object/public/${bucket}/${key}`;
 
       return NextResponse.json({
@@ -50,18 +50,11 @@ export async function POST(req: NextRequest) {
         path: key,
       });
     } catch (uploadError: unknown) {
-      console.warn("S3 Upload error / fallback:", (uploadError as Error).message);
-
-      // Fallback data URL if credentials not yet configured or bucket missing
-      const fallbackUrl = `data:${file.type};base64,${buffer.toString("base64")}`;
-      return NextResponse.json({
-        id: `ev_${crypto.randomUUID()}`,
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        url: fallbackUrl,
-        path: key,
-      });
+      console.error("S3 Upload failed:", (uploadError as Error).message);
+      return NextResponse.json(
+        { error: "Gagal mengunggah file ke server. Periksa konfigurasi S3." },
+        { status: 500 }
+      );
     }
   } catch (error) {
     console.error("POST /api/storage/upload error:", error);

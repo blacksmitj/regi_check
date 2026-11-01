@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
@@ -233,8 +234,8 @@ export function SortableFormFieldItem({
             {/* Field Inputs */}
             <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               {/* Sumber Field */}
-              <div className="space-y-1">
-                <Label className="text-[11px] font-semibold">Sumber Field</Label>
+              <Field className="space-y-1">
+                <FieldLabel className="text-[11px] font-semibold">Sumber Field</FieldLabel>
                 <Select
                   value={item.sourceType === "excel_column" ? "excel_column" : "custom_field"}
                   onValueChange={(val) => {
@@ -253,22 +254,22 @@ export function SortableFormFieldItem({
                     <SelectItem value="excel_column">Kolom Bawaan Excel</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
+              </Field>
 
               {/* Label Field */}
-              <div className="space-y-1">
-                <Label className="text-[11px]">Nama Field / Label</Label>
+              <Field className="space-y-1">
+                <FieldLabel className="text-[11px]">Nama Field / Label</FieldLabel>
                 <Input
                   value={item.label}
                   placeholder="Misal: Foto Peserta / NIK"
                   onChange={(e) => onUpdate(item.id, { label: e.target.value })}
                   className="text-xs h-8"
                 />
-              </div>
+              </Field>
 
               {/* Tipe Tampilan / Input */}
-              <div className="space-y-1">
-                <Label className="text-[11px]">Tipe Input</Label>
+              <Field className="space-y-1">
+                <FieldLabel className="text-[11px]">Tipe Input</FieldLabel>
                 <Select
                   value={item.type}
                   onValueChange={(val) => onUpdate(item.id, { type: val as any })}
@@ -286,14 +287,14 @@ export function SortableFormFieldItem({
                     <SelectItem value="drive_file">Upload Bukti Foto</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
+              </Field>
 
               {/* Kolom Excel Mapping */}
               {isExcelMapped ? (
-                <div className="space-y-1">
-                  <Label className="text-[11px] text-emerald-600 font-semibold">
+                <Field className="space-y-1">
+                  <FieldLabel className="text-[11px] text-emerald-600 font-semibold">
                     Map ke Kolom Excel
-                  </Label>
+                  </FieldLabel>
                   {availableColumns.length > 0 ? (
                     <Select
                       value={item.excelColumn || ""}
@@ -323,17 +324,17 @@ export function SortableFormFieldItem({
                       className="text-xs h-8"
                     />
                   )}
-                </div>
+                </Field>
               ) : (
-                <div className="space-y-1">
-                  <Label className="text-[11px]">Keterangan / Panduan</Label>
+                <Field className="space-y-1">
+                  <FieldLabel className="text-[11px]">Keterangan / Panduan</FieldLabel>
                   <Input
                     value={item.description || ""}
                     placeholder="Petunjuk pengisian..."
                     onChange={(e) => onUpdate(item.id, { description: e.target.value })}
                     className="text-xs h-8"
                   />
-                </div>
+                </Field>
               )}
             </div>
 

@@ -553,18 +553,23 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
                   <p className="text-xs text-muted-foreground max-w-sm mb-5">
                     Data kolom akan disimpan persis sesuai nama header yang ada di dalam berkas Anda.
                   </p>
-                  <label className="cursor-pointer">
+                  <div>
                     <input
+                      id="upload-file-initial"
                       type="file"
                       accept=".csv, .xlsx, .xls, text/csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
                       onChange={handleFileUpload}
                       className="hidden"
                     />
-                    <Button size="sm" className="gap-2 pointer-events-none">
+                    <Button
+                      size="sm"
+                      className="gap-2 cursor-pointer"
+                      onClick={() => document.getElementById("upload-file-initial")?.click()}
+                    >
                       <Upload className="w-4 h-4" />
                       Pilih & Unggah Berkas
                     </Button>
-                  </label>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -634,18 +639,24 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
                         </div>
                       )}
 
-                      <label className="cursor-pointer">
+                      <div>
                         <input
+                          id="upload-file-secondary"
                           type="file"
                           accept=".csv, .xlsx, .xls, text/csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
                           onChange={handleFileUpload}
                           className="hidden"
                         />
-                        <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 pointer-events-none">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 text-xs gap-1.5 cursor-pointer"
+                          onClick={() => document.getElementById("upload-file-secondary")?.click()}
+                        >
                           <Upload className="w-3.5 h-3.5" />
                           Ganti File
                         </Button>
-                      </label>
+                      </div>
                     </div>
                   </div>
                 </CardHeader>

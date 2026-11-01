@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { AlertTriangle, Trash2, RotateCcw, Loader2 } from "lucide-react";
 
 interface WorkspaceConfirmationDialogProps {
@@ -92,8 +92,8 @@ export function WorkspaceConfirmationDialog({
           <p className="text-[11px] text-muted-foreground">
             Ketik kata <span className="font-mono font-bold text-destructive bg-destructive/10 px-1 py-0.5 rounded">{requiredKeyword}</span> di bawah untuk mengaktifkan tombol konfirmasi:
           </p>
-          <div className="space-y-1">
-            <Label htmlFor="confirm-keyword" className="sr-only">Kata Kunci Konfirmasi</Label>
+          <Field className="space-y-1">
+            <FieldLabel htmlFor="confirm-keyword" className="sr-only">Kata Kunci Konfirmasi</FieldLabel>
             <Input
               id="confirm-keyword"
               placeholder={`Ketik "${requiredKeyword}"`}
@@ -103,7 +103,7 @@ export function WorkspaceConfirmationDialog({
               autoComplete="off"
               disabled={isLoading}
             />
-          </div>
+          </Field>
         </div>
 
         <AlertDialogFooter className="gap-2 sm:gap-0">
