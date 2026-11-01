@@ -96,6 +96,7 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
 
   const [items, setItems] = useState<FormField[]>([]);
   const [isSavedNotice, setIsSavedNotice] = useState(false);
+  const [savedSnapshot, setSavedSnapshot] = useState<string | null>(null);
   const [editingField, setEditingField] = useState<FormField | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -109,6 +110,7 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
   const [templateName, setTemplateName] = useState("");
   const [templateDesc, setTemplateDesc] = useState("");
   const [templateSavedNotice, setTemplateSavedNotice] = useState<string | null>(null);
+  const [templateErrorNotice, setTemplateErrorNotice] = useState<string | null>(null);
 
   // Apply Template Modal State
   const [applyTemplateDialogOpen, setApplyTemplateDialogOpen] = useState(false);
@@ -130,9 +132,12 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
   // Detect unsaved changes by comparing current items with server state
   const isDirty = useMemo(() => {
     if (!initializedRef.current) return false;
+    const current = JSON.stringify(items);
+    // Baseline = data yang baru saja disimpan (jika ada), bukan data server lama/ter-normalisasi
+    if (savedSnapshot !== null) return current !== savedSnapshot;
     if (items.length !== initialItems.length) return true;
-    return JSON.stringify(items) !== JSON.stringify(initialItems);
-  }, [items, initialItems]);
+    return current !== JSON.stringify(initialItems);
+  }, [items, initialItems, savedSnapshot]);
 
   // Browser-level guard: warn on refresh / tab close
   useEffect(() => {
@@ -204,7 +209,8 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
   const saveMutation = useMutation({
     mutationFn: (updatedItems: FormField[]) =>
       api.saveWorkspaceForm(workspaceId, updatedItems),
-    onSuccess: async () => {
+    onSuccess: async (_data, savedItems) => {
+      setSavedSnapshot(JSON.stringify(savedItems));
       queryClient.invalidateQueries({ queryKey: ["workspaceForm", workspaceId] });
       queryClient.invalidateQueries({ queryKey: ["workspaceChecklist", workspaceId] });
       setIsSavedNotice(true);
@@ -232,6 +238,7 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
         sampleColumns: availableColumnNames,
         items: items.map((it, idx) => ({
           ...it,
+          id: `item-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
           order: idx + 1,
         })),
         updatedAt: now,
@@ -241,8 +248,14 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["templates"] });
       queryClient.invalidateQueries({ queryKey: ["template", data.id] });
+      setTemplateErrorNotice(null);
       setTemplateSavedNotice(`Template "${data.name}" Berhasil Diperbarui!`);
       setTimeout(() => setTemplateSavedNotice(null), 4000);
+    },
+    onError: (err) => {
+      const msg = err instanceof Error ? err.message : "Gagal memperbarui template";
+      setTemplateErrorNotice(msg);
+      setTimeout(() => setTemplateErrorNotice(null), 5000);
     },
   });
 
@@ -777,6 +790,12 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
           </div>
 
           <div className="hidden sm:flex items-center gap-2">
+            {templateErrorNotice && (
+              <span className="text-xs font-medium text-destructive flex items-center gap-1 animate-in fade-in">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                <span className="max-w-[240px] truncate">{templateErrorNotice}</span>
+              </span>
+            )}
             {templateSavedNotice && (
               <span className="text-xs font-medium text-emerald-600 flex items-center gap-1 animate-in fade-in">
                 <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
@@ -1059,6 +1078,12 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
                 <> &bull; <span className="font-semibold text-foreground">{totalSectionsCount}</span> seksi</>
               )}
             </div>
+            {templateErrorNotice && (
+              <span className="text-xs font-medium text-destructive flex items-center gap-1 animate-in fade-in">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                <span className="max-w-[220px] truncate">{templateErrorNotice}</span>
+              </span>
+            )}
             {templateSavedNotice && (
               <span className="text-xs font-medium text-emerald-600 flex items-center gap-1 animate-in fade-in">
                 <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
@@ -1071,7 +1096,7 @@ export function WorkspaceFormSettingsClient({ workspaceId }: { workspaceId: stri
                 <span className="truncate">Perubahan Form Tersimpan!</span>
               </span>
             )}
-            {isDirty && !isSavedNotice && !templateSavedNotice && (
+            {isDirty && !isSavedNotice && !templateSavedNotice && !templateErrorNotice && (
               <span className="text-xs font-medium text-amber-600 flex items-center gap-1 animate-in fade-in">
                 <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
                 <span className="hidden sm:inline truncate">Ada perubahan belum disimpan</span>

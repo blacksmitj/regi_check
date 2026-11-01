@@ -48,38 +48,42 @@ export async function POST(req: NextRequest) {
 
     const tplId = customId || `tpl_${crypto.randomUUID()}`;
 
-    const [savedTpl] = await db
-      .insert(formTemplate)
-      .values({
-        id: tplId,
-        name,
-        description: description || null,
-        sampleColumns: sampleColumns || [],
-      })
-      .returning();
+    const savedTpl = await db.transaction(async (tx) => {
+      const [createdTpl] = await tx
+        .insert(formTemplate)
+        .values({
+          id: tplId,
+          name,
+          description: description || null,
+          sampleColumns: sampleColumns || [],
+        })
+        .returning();
 
-    if (items && items.length > 0) {
-      const fields = items.map((item: FormField, idx: number) => ({
-        id: item.id || `field_${crypto.randomUUID()}`,
-        templateId: tplId,
-        workspaceId: null,
-        label: item.label,
-        description: item.description || null,
-        type: item.type,
-        sourceType: item.sourceType || "checklist_input",
-        excelColumn: item.excelColumn || null,
-        required: item.required ?? false,
-        editable: item.editable ?? false,
-        evidenceEnabled: item.evidenceEnabled ?? false,
-        evidenceRequired: item.evidenceRequired ?? false,
-        validation: item.validation || null,
-        options: item.options || null,
-        order: item.order ?? idx,
-        active: item.active ?? true,
-      }));
+      if (items && items.length > 0) {
+        const fields = items.map((item: FormField, idx: number) => ({
+          id: `field_${crypto.randomUUID()}`,
+          templateId: tplId,
+          workspaceId: null,
+          label: item.label,
+          description: item.description || null,
+          type: item.type,
+          sourceType: item.sourceType || "checklist_input",
+          excelColumn: item.excelColumn || null,
+          required: item.required ?? false,
+          editable: item.editable ?? false,
+          evidenceEnabled: item.evidenceEnabled ?? false,
+          evidenceRequired: item.evidenceRequired ?? false,
+          validation: item.validation || null,
+          options: item.options || null,
+          order: item.order ?? idx,
+          active: item.active ?? true,
+        }));
 
-      await db.insert(formField).values(fields);
-    }
+        await tx.insert(formField).values(fields);
+      }
+
+      return createdTpl;
+    });
 
     const insertedFields = await db
       .select()

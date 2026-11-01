@@ -69,31 +69,33 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Re-create items for this template
-    await db.delete(formField).where(eq(formField.templateId, id));
+    // Re-create items for this template atomically with fresh IDs to avoid PK collisions with workspace fields
+    await db.transaction(async (tx) => {
+      await tx.delete(formField).where(eq(formField.templateId, id));
 
-    if (items && items.length > 0) {
-      const formatted = items.map((item: FormField, idx: number) => ({
-        id: item.id || `field_${crypto.randomUUID()}`,
-        templateId: id,
-        workspaceId: null,
-        label: item.label,
-        description: item.description || null,
-        type: item.type,
-        sourceType: item.sourceType || "checklist_input",
-        excelColumn: item.excelColumn || null,
-        required: item.required ?? false,
-        editable: item.editable ?? false,
-        evidenceEnabled: item.evidenceEnabled ?? false,
-        evidenceRequired: item.evidenceRequired ?? false,
-        validation: item.validation || null,
-        options: item.options || null,
-        order: item.order ?? idx,
-        active: item.active ?? true,
-      }));
+      if (items && items.length > 0) {
+        const formatted = items.map((item: FormField, idx: number) => ({
+          id: `field_${crypto.randomUUID()}`,
+          templateId: id,
+          workspaceId: null,
+          label: item.label,
+          description: item.description || null,
+          type: item.type,
+          sourceType: item.sourceType || "checklist_input",
+          excelColumn: item.excelColumn || null,
+          required: item.required ?? false,
+          editable: item.editable ?? false,
+          evidenceEnabled: item.evidenceEnabled ?? false,
+          evidenceRequired: item.evidenceRequired ?? false,
+          validation: item.validation || null,
+          options: item.options || null,
+          order: item.order ?? idx,
+          active: item.active ?? true,
+        }));
 
-      await db.insert(formField).values(formatted);
-    }
+        await tx.insert(formField).values(formatted);
+      }
+    });
 
     const updatedFields = await db
       .select()

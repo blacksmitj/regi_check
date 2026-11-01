@@ -28,7 +28,11 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     const errorBody = await res.json().catch(() => ({}));
-    throw new Error(errorBody.error || `HTTP error ${res.status}: ${res.statusText}`);
+    const err = new Error(
+      errorBody.error || `HTTP error ${res.status}: ${res.statusText}`
+    ) as Error & { status?: number };
+    err.status = res.status;
+    throw err;
   }
 
   return res.json();
@@ -175,8 +179,12 @@ export const api = {
             body: JSON.stringify(template),
           }
         );
-      } catch {
-        // If not found, create new
+      } catch (err) {
+        // Hanya buat template baru jika memang belum ada di database (404)
+        const status = (err as { status?: number })?.status;
+        if (status !== 404) {
+          throw err;
+        }
       }
     }
 
