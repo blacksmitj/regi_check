@@ -299,6 +299,97 @@ export const api = {
     });
   },
 
+  async importParticipantsStream(
+    workspaceId: string,
+    participants: Array<{
+      data: Record<string, unknown>;
+      action?: "create" | "overwrite" | "skip";
+      existingId?: string;
+    }>,
+    onProgress?: (progress: {
+      currentBatch: number;
+      totalBatches: number;
+      processed: number;
+      total: number;
+      percentage: number;
+      createdCount: number;
+      updatedCount: number;
+      skippedCount: number;
+    }) => void
+  ): Promise<{
+    total: number;
+    importedCount: number;
+    createdCount: number;
+    updatedCount: number;
+    skippedCount: number;
+  }> {
+    const res = await fetch(`/api/workspaces/${workspaceId}/participants`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/x-ndjson",
+      },
+      body: JSON.stringify({ participants, stream: true }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${res.status}: Gagal memproses import`);
+    }
+
+    if (!res.body) {
+      throw new Error("ReadableStream tidak didukung oleh browser");
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let finalResult: {
+      total: number;
+      importedCount: number;
+      createdCount: number;
+      updatedCount: number;
+      skippedCount: number;
+    } | null = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        const event = JSON.parse(line);
+
+        if (event.type === "error") {
+          throw new Error(event.error || "Gagal memproses batch import");
+        } else if (event.type === "progress") {
+          onProgress?.(event);
+        } else if (event.type === "done") {
+          finalResult = event.result;
+        }
+      }
+    }
+
+    if (buffer.trim()) {
+      const event = JSON.parse(buffer);
+      if (event.type === "error") {
+        throw new Error(event.error || "Gagal memproses batch import");
+      } else if (event.type === "done") {
+        finalResult = event.result;
+      }
+    }
+
+    if (!finalResult) {
+      throw new Error("Import selesai tanpa data ringkasan akhir");
+    }
+
+    return finalResult;
+  },
+
   // --- Checklist Responses ---
   async getResponses(
     participantId: string,

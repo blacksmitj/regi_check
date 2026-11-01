@@ -29,6 +29,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Progress } from "@/components/ui/progress";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import Link from "next/link";
 import * as XLSX from "xlsx";
 import {
@@ -55,6 +63,7 @@ import {
   TableProperties,
   User,
   Image as ImageIcon,
+  Loader2,
 } from "lucide-react";
 import { Participant } from "@/types/domain";
 
@@ -116,6 +125,19 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
     updatedCount: number;
     skippedCount: number;
   } | null>(null);
+
+  // Streaming Import Progress State
+  const [streamProgress, setStreamProgress] = useState<{
+    currentBatch: number;
+    totalBatches: number;
+    processed: number;
+    total: number;
+    percentage: number;
+    createdCount: number;
+    updatedCount: number;
+    skippedCount: number;
+  } | null>(null);
+  const [streamError, setStreamError] = useState<string | null>(null);
 
   // Detect CSV delimiter
   const detectDelimiter = (text: string): string => {
@@ -396,6 +418,19 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
   // Import mutation
   const importMutation = useMutation({
     mutationFn: async () => {
+      setStreamError(null);
+      const totalParticipants = analyzedRows.length;
+      setStreamProgress({
+        currentBatch: 0,
+        totalBatches: Math.ceil(totalParticipants / 25) || 1,
+        processed: 0,
+        total: totalParticipants,
+        percentage: 0,
+        createdCount: 0,
+        updatedCount: 0,
+        skippedCount: 0,
+      });
+
       // 1. Simpan konfigurasi pemetaan kolom identitas & urutan kolom import ke Workspace
       await api.updateWorkspace(workspaceId, {
         uniqueKeyColumn: selectedKeyField,
@@ -404,20 +439,26 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
         importHeaders: headers.length > 0 ? headers : undefined,
       });
 
-      // 2. Import peserta
+      // 2. Import peserta dengan streaming progress
       const payload = analyzedRows.map((r) => ({
         data: r.data,
         action: r.action,
         existingId: r.existingId,
       }));
 
-      return api.importParticipants(workspaceId, payload);
+      return api.importParticipantsStream(workspaceId, payload, (progress) => {
+        setStreamProgress(progress);
+      });
     },
     onSuccess: (res) => {
       setImportResult(res);
       queryClient.invalidateQueries({ queryKey: ["participants", workspaceId] });
       queryClient.invalidateQueries({ queryKey: ["workspace", workspaceId] });
+      setStreamProgress(null);
       setStep(3);
+    },
+    onError: (err: any) => {
+      setStreamError(err?.message || "Terjadi kesalahan saat mengimpor peserta.");
     },
   });
 
@@ -434,16 +475,19 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
     setCsvContent(null);
     setAnalyzedRows([]);
     setImportResult(null);
+    setStreamProgress(null);
+    setStreamError(null);
     setStep(1);
   };
 
   return (
     <div className="flex-1 p-6 max-w-6xl mx-auto w-full space-y-6">
+      <fieldset disabled={importMutation.isPending} className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border pb-4">
         <div className="flex items-center gap-3">
           <Link href={`/workspaces/${workspaceId}`}>
-            <Button variant="ghost" size="icon">
+            <Button variant="ghost" size="icon" disabled={importMutation.isPending}>
               <ArrowLeft className="w-4 h-4" />
             </Button>
           </Link>
@@ -456,7 +500,13 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
         </div>
 
         {step < 3 && rawRows.length > 0 && (
-          <Button variant="outline" size="sm" onClick={resetImportFlow} className="text-xs">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={resetImportFlow}
+            disabled={importMutation.isPending}
+            className="text-xs"
+          >
             Mulai Ulang Berkas
           </Button>
         )}
@@ -770,66 +820,100 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
                     </div>
                   </div>
 
-                  {/* Mini Preview Table (First 3-5 rows) */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                        <TableProperties className="w-3.5 h-3.5" />
-                        <span>Pratinjau Data Berkas (5 Baris Pertama)</span>
-                      </div>
-                      <span className="text-[11px] text-muted-foreground">
-                        Data disimpan sesuai header asli
-                      </span>
-                    </div>
+                  {/* Mini Preview Table (First 5 rows, max 5 cols) */}
+                  {(() => {
+                    const MAX_PREVIEW_COLS = 5;
+                    // Prioritaskan kolom kunci unik & nama, lalu sisanya dari awal header
+                    const priorityCols = [selectedKeyField, selectedNameField].filter(Boolean);
+                    const otherCols = headers.filter((h) => !priorityCols.includes(h));
+                    const previewCols = [
+                      ...priorityCols,
+                      ...otherCols,
+                    ].slice(0, MAX_PREVIEW_COLS);
+                    const hiddenColCount = headers.length - previewCols.length;
 
-                    <div className="rounded-lg border overflow-x-auto bg-card">
-                      <Table>
-                        <TableHeader className="bg-muted/40">
-                          <TableRow>
-                            <TableHead className="w-12 text-[11px] font-bold">#</TableHead>
-                            {headers.map((col) => (
-                              <TableHead key={col} className="text-[11px] font-bold whitespace-nowrap">
-                                <div className="flex items-center gap-1.5">
-                                  <span>{col}</span>
-                                  {col === selectedKeyField && (
-                                    <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-primary/15 text-primary border-0">
-                                      ID Unik
-                                    </Badge>
-                                  )}
-                                  {col === selectedNameField && (
-                                    <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-blue-500/15 text-blue-600 border-0">
-                                      Nama
-                                    </Badge>
-                                  )}
-                                  {col === selectedPhotoField && (
-                                    <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-amber-500/15 text-amber-600 border-0">
-                                      Foto
-                                    </Badge>
-                                  )}
-                                </div>
-                              </TableHead>
-                            ))}
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {rawRows.slice(0, 5).map((row, idx) => (
-                            <TableRow key={idx}>
-                              <TableCell className="text-xs text-muted-foreground">{idx + 1}</TableCell>
-                              {headers.map((col) => (
-                                <TableCell
-                                  key={col}
-                                  className={`text-xs whitespace-nowrap ${col === selectedKeyField ? "font-semibold text-foreground bg-primary/[0.03]" : "text-muted-foreground"
+                    return (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                            <TableProperties className="w-3.5 h-3.5" />
+                            <span>Pratinjau Data Berkas (5 Baris Pertama)</span>
+                          </div>
+                          <span className="text-[11px] text-muted-foreground">
+                            Data disimpan sesuai header asli
+                          </span>
+                        </div>
+
+                        <div className="rounded-lg border overflow-hidden bg-card">
+                          <Table className="table-fixed w-full">
+                            <TableHeader className="bg-muted/40">
+                              <TableRow>
+                                <TableHead className="w-8 text-[11px] font-bold">#</TableHead>
+                                {previewCols.map((col) => (
+                                  <TableHead
+                                    key={col}
+                                    className={`text-[11px] font-bold ${
+                                      col === selectedKeyField ? "w-36" : "w-36"
                                     }`}
-                                >
-                                  {String(row[col] ?? "-")}
-                                </TableCell>
+                                  >
+                                    <div className="flex items-center gap-1 min-w-0">
+                                      <span className="truncate block" title={col}>{col}</span>
+                                      {col === selectedKeyField && (
+                                        <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-primary/15 text-primary border-0 shrink-0">
+                                          ID
+                                        </Badge>
+                                      )}
+                                      {col === selectedNameField && (
+                                        <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-blue-500/15 text-blue-600 border-0 shrink-0">
+                                          Nama
+                                        </Badge>
+                                      )}
+                                      {col === selectedPhotoField && (
+                                        <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-amber-500/15 text-amber-600 border-0 shrink-0">
+                                          Foto
+                                        </Badge>
+                                      )}
+                                    </div>
+                                  </TableHead>
+                                ))}
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {rawRows.slice(0, 5).map((row, idx) => (
+                                <TableRow key={idx}>
+                                  <TableCell className="text-xs text-muted-foreground">{idx + 1}</TableCell>
+                                  {previewCols.map((col) => (
+                                    <TableCell
+                                      key={col}
+                                      className={`text-xs ${
+                                        col === selectedKeyField
+                                          ? "font-semibold text-foreground bg-primary/[0.03]"
+                                          : "text-muted-foreground"
+                                      }`}
+                                    >
+                                      <span
+                                        className="block truncate"
+                                        title={String(row[col] ?? "-")}
+                                      >
+                                        {String(row[col] ?? "-")}
+                                      </span>
+                                    </TableCell>
+                                  ))}
+                                </TableRow>
                               ))}
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </div>
+                            </TableBody>
+                          </Table>
+                        </div>
+
+                        {hiddenColCount > 0 && (
+                          <p className="text-[11px] text-muted-foreground text-right">
+                            Menampilkan <strong>{previewCols.length}</strong> dari <strong>{headers.length}</strong> kolom
+                            <span className="ml-1 text-muted-foreground/60">({hiddenColCount} kolom lainnya disembunyikan)</span>
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </CardContent>
 
                 <CardFooter className="flex justify-between border-t border-border pt-4">
@@ -906,39 +990,43 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
 
           {/* Mass Action & Filter Toolbar */}
           <Card className="border shadow-xs">
-            <CardHeader className="pb-3 border-b">
-              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-                <div>
-                  <CardTitle className="text-base font-semibold">
-                    Review Duplikasi & Tindakan
-                  </CardTitle>
-                  <CardDescription className="text-xs mt-0.5">
-                    Acuan Kunci: <Badge variant="outline" className="text-[10px] ml-1">{selectedKeyField}</Badge>
-                    {" — "}Tentukan apakah data yang terdeteksi duplikat ingin <strong>Ditimpa (Update)</strong> atau <strong>Dilewati (Skip)</strong>.
+            <CardHeader className="p-4 pb-3 border-b space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <CardTitle className="text-base font-semibold">
+                      Review Duplikasi & Tindakan
+                    </CardTitle>
+                    <Badge variant="outline" className="text-[10px] font-normal px-2 py-0.5 gap-1 bg-muted/40">
+                      Acuan Kunci: <span className="font-semibold text-foreground">{selectedKeyField}</span>
+                    </Badge>
+                  </div>
+                  <CardDescription className="text-xs">
+                    Tentukan apakah data yang terdeteksi duplikat ingin <strong>Ditimpa (Update)</strong> atau <strong>Dilewati (Skip)</strong>.
                   </CardDescription>
                 </div>
 
                 {/* Bulk Actions */}
                 {duplicatesCount > 0 && (
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs text-muted-foreground font-medium">Aksi Massal Duplikat:</span>
+                  <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                    <span className="text-[11px] text-muted-foreground font-medium">Aksi Massal Duplikat:</span>
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => setAllDuplicatesAction("overwrite")}
-                      className="text-xs h-8 border-amber-500/40 text-amber-700 hover:bg-amber-50"
+                      className="text-xs h-7 px-2.5 border-amber-500/40 text-amber-700 hover:bg-amber-50"
                     >
-                      <RefreshCw className="w-3.5 h-3.5 mr-1 text-amber-600" />
-                      Timpa Semua Duplikat
+                      <RefreshCw className="w-3 h-3 mr-1 text-amber-600" />
+                      Timpa Semua
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => setAllDuplicatesAction("skip")}
-                      className="text-xs h-8 text-muted-foreground hover:bg-muted"
+                      className="text-xs h-7 px-2.5 text-muted-foreground hover:bg-muted"
                     >
-                      <ShieldAlert className="w-3.5 h-3.5 mr-1" />
-                      Lewati Semua Duplikat
+                      <ShieldAlert className="w-3 h-3 mr-1" />
+                      Lewati Semua
                     </Button>
                   </div>
                 )}
@@ -1315,6 +1403,104 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
           </CardContent>
         </Card>
       )}
+      </fieldset>
+
+      {/* =========================================================================
+          MODAL PROGRESS BLOCKING SAAT IMPORT BERLANGSUNG
+      ========================================================================= */}
+      <Dialog
+        open={importMutation.isPending || !!streamError}
+        onOpenChange={(open) => {
+          // Cegah dialog ditutup jika proses import masih pending
+          if (!open && importMutation.isPending) return;
+        }}
+      >
+        <DialogContent
+          showCloseButton={false}
+          className="sm:max-w-md p-6 select-none"
+        >
+          <DialogHeader className="items-center text-center">
+            {streamError ? (
+              <div className="w-12 h-12 rounded-full bg-destructive/10 text-destructive flex items-center justify-center mb-1">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+            ) : (
+              <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mb-1 animate-pulse">
+                <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              </div>
+            )}
+            <DialogTitle className="text-base font-bold">
+              {streamError ? "Gagal Mengimpor Peserta" : "Sedang Memproses Import..."}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              {streamError
+                ? streamError
+                : "Mohon tunggu, data sedang disimpan ke server dalam beberapa batch. Jangan tutup halaman ini."}
+            </DialogDescription>
+          </DialogHeader>
+
+          {!streamError && streamProgress && (
+            <div className="space-y-4 py-2">
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-foreground">
+                    Batch {streamProgress.currentBatch} dari {streamProgress.totalBatches}
+                  </span>
+                  <span className="font-bold text-primary tabular-nums">
+                    {streamProgress.percentage}%
+                  </span>
+                </div>
+                <Progress value={streamProgress.percentage} className="w-full" />
+              </div>
+
+              <div className="p-3 rounded-lg bg-muted/50 border border-border/60 text-xs space-y-1.5">
+                <div className="flex justify-between items-center text-muted-foreground">
+                  <span>Peserta diproses:</span>
+                  <span className="font-semibold text-foreground tabular-nums">
+                    {streamProgress.processed} / {streamProgress.total}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-muted-foreground">
+                  <span>Data baru ditambahkan:</span>
+                  <span className="font-semibold text-emerald-600 tabular-nums">
+                    {streamProgress.createdCount}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-muted-foreground">
+                  <span>Data ditimpa:</span>
+                  <span className="font-semibold text-amber-600 tabular-nums">
+                    {streamProgress.updatedCount}
+                  </span>
+                </div>
+                {streamProgress.skippedCount > 0 && (
+                  <div className="flex justify-between items-center text-muted-foreground">
+                    <span>Data dilewati (skip):</span>
+                    <span className="font-semibold text-muted-foreground tabular-nums">
+                      {streamProgress.skippedCount}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {streamError && (
+            <div className="flex justify-end pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs"
+                onClick={() => {
+                  setStreamError(null);
+                  setStreamProgress(null);
+                }}
+              >
+                Tutup & Periksa Data
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
