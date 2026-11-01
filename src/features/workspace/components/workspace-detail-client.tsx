@@ -2,12 +2,21 @@
 
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import { api } from "@/lib/api/client";
 import { ParticipantSidebar } from "@/features/participant/components/participant-sidebar";
-import { ChecklistFormPanel } from "@/features/checklist/components/checklist-form-panel";
+import { FormEntryPanel } from "@/features/form/components/form-entry-panel";
 import { ChecklistResponse, SyncStatus } from "@/types/domain";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { WorkspaceConfirmationDialog } from "./workspace-confirmation-dialog";
 import Link from "next/link";
 import {
   FileSpreadsheet,
@@ -18,13 +27,25 @@ import {
   Download,
   AlertCircle,
   FileCheck2,
+  MoreVertical,
+  RotateCcw,
+  Trash2,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
 import { EmptyState } from "@/components/shared/empty-state";
 
 export function WorkspaceDetailClient({ workspaceId }: { workspaceId: string }) {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
+
+  const [confirmModal, setConfirmModal] = useState<{
+    open: boolean;
+    type: "clean_data" | "delete_workspace";
+  }>({
+    open: false,
+    type: "clean_data",
+  });
 
   const [selectedParticipantId, setSelectedParticipantId] = useState<string | null>(null);
   const [mobileShowChecklist, setMobileShowChecklist] = useState(false);
@@ -146,10 +167,16 @@ export function WorkspaceDetailClient({ workspaceId }: { workspaceId: string }) 
                   <span>Import Excel</span>
                 </Button>
               </Link>
+              <Link href={`/workspaces/${workspaceId}/form-settings`}>
+                <Button size="sm" variant="outline" className="gap-1.5 text-xs h-8">
+                  <FileCheck2 className="w-3.5 h-3.5 text-primary" />
+                  <span>Atur Form</span>
+                </Button>
+              </Link>
               <Link href={`/workspaces/${workspaceId}/settings`}>
                 <Button size="sm" variant="outline" className="gap-1.5 text-xs h-8">
                   <Settings className="w-3.5 h-3.5" />
-                  <span>Atur Checklist</span>
+                  <span>Setting Workspace</span>
                 </Button>
               </Link>
               <Link href={`/workspaces/${workspaceId}/export`}>
@@ -158,10 +185,58 @@ export function WorkspaceDetailClient({ workspaceId }: { workspaceId: string }) 
                   <span>Export</span>
                 </Button>
               </Link>
+
+              {/* Action Dropdown for Reset / Delete */}
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button size="icon" variant="ghost" className="h-8 w-8">
+                      <MoreVertical className="w-4 h-4" />
+                      <span className="sr-only">Menu Opsi</span>
+                    </Button>
+                  }
+                />
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuItem
+                    onClick={() => setConfirmModal({ open: true, type: "clean_data" })}
+                    className="text-xs text-amber-700 dark:text-amber-400 gap-2 cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Bersihkan Data Form</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => setConfirmModal({ open: true, type: "delete_workspace" })}
+                    className="text-xs text-destructive focus:text-destructive gap-2 cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Hapus Workspace Ini</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </>
           )}
         </div>
       </div>
+
+      {/* Confirmation Modal */}
+      <WorkspaceConfirmationDialog
+        open={confirmModal.open}
+        onOpenChange={(open) => setConfirmModal((prev) => ({ ...prev, open }))}
+        type={confirmModal.type}
+        workspaceName={workspace.name}
+        onConfirm={async () => {
+          if (confirmModal.type === "clean_data") {
+            await api.cleanWorkspaceResponses(workspaceId);
+            queryClient.invalidateQueries({ queryKey: ["participants", workspaceId] });
+            queryClient.invalidateQueries({ queryKey: ["responses"] });
+          } else {
+            await api.deleteWorkspace(workspaceId);
+            queryClient.invalidateQueries({ queryKey: ["workspaces"] });
+            router.push("/workspaces");
+          }
+        }}
+      />
 
       {/* Main Split Layout: Left Sidebar Peserta + Right Panel Checklist */}
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
@@ -177,12 +252,22 @@ export function WorkspaceDetailClient({ workspaceId }: { workspaceId: string }) 
 
         {activeParticipant ? (
           <div className={`flex-1 flex flex-col overflow-hidden ${!mobileShowChecklist ? "hidden md:flex" : "flex"}`}>
-            <ChecklistFormPanel
+            <FormEntryPanel
               participant={activeParticipant}
-              checklistItems={checklistItems}
+              formFields={checklistItems}
               initialResponses={activeResponses}
               onSaveResponse={async (resp) => {
-                await saveMutation.mutateAsync(resp);
+                await saveMutation.mutateAsync(resp as any);
+              }}
+              onUpdateParticipantData={async (updatedData) => {
+                try {
+                  setSyncStatus("saving");
+                  await api.updateParticipant(activeParticipant.id, { data: updatedData });
+                  queryClient.invalidateQueries({ queryKey: ["participants", workspaceId] });
+                  setSyncStatus("saved");
+                } catch {
+                  setSyncStatus("error");
+                }
               }}
               syncStatus={syncStatus}
               onBackToList={() => setMobileShowChecklist(false)}

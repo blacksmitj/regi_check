@@ -42,9 +42,9 @@ export default function LoginPage() {
           <div className="mx-auto w-12 h-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold text-xl">
             RC
           </div>
-          <CardTitle className="text-2xl font-bold tracking-tight">Registration Checklist</CardTitle>
+          <CardTitle className="text-2xl font-bold tracking-tight">Registration Form</CardTitle>
           <CardDescription>
-            Aplikasi verifikasi kelengkapan berkas registrasi peserta kegiatan.
+            Aplikasi pengelolaan form dan registrasi peserta kegiatan.
           </CardDescription>
         </CardHeader>
 
@@ -69,11 +69,10 @@ export default function LoginPage() {
                   <div
                     key={user.id}
                     onClick={() => setSelectedEmail(user.email)}
-                    className={`flex items-start gap-3 p-3 rounded-lg border text-left cursor-pointer transition-all ${
-                      isSelected
+                    className={`flex items-start gap-3 p-3 rounded-lg border text-left cursor-pointer transition-all ${isSelected
                         ? "border-primary bg-primary/5 ring-1 ring-primary"
                         : "border-border hover:bg-muted/50"
-                    }`}
+                      }`}
                   >
                     <div className="mt-0.5">
                       {user.role === "admin" ? (

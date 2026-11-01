@@ -1,41 +1,77 @@
-import { ChecklistItem, ChecklistResponse, ParticipantStatus } from "@/types/domain";
+import { FormField, ChecklistResponse, ParticipantStatus } from "@/types/domain";
 
 /**
- * Rules according to PRD 5.7:
- * Priority: Ditolak -> Belum lengkap -> Lengkap.
- * - Ditolak: minimal terdapat satu item yang ditolak (status === 'rejected')
- * - Belum lengkap: masih terdapat item wajib yang belum terpenuhi (value is empty / invalid)
- * - Lengkap: seluruh item wajib terpenuhi
- * Optional items that are not filled DO NOT prevent status from becoming complete.
+ * Calculates participant completion status.
+ *
+ * Mode 1 (Unified Participant Data - Pure Form):
+ * - Complete: all active required fields have non-empty, valid values in participant.data
+ * - Incomplete: one or more active required fields are missing or empty
+ *
+ * Mode 2 (Legacy Checklist Responses - fallback):
+ * - Rejected: at least one item has status === 'rejected'
+ * - Incomplete: missing required responses or incomplete status
+ * - Complete: all required items completed
  */
 export function calculateParticipantStatus(
-  checklistItems: ChecklistItem[],
-  responses: ChecklistResponse[]
+  formFields: FormField[],
+  dataOrResponses: Record<string, unknown> | ChecklistResponse[]
 ): ParticipantStatus {
-  const activeItems = checklistItems.filter((i) => i.active);
-  const responseMap = new Map<string, ChecklistResponse>();
-  responses.forEach((r) => responseMap.set(r.checklistItemId, r));
+  const activeFields = formFields.filter((f) => f.active);
 
-  // 1. Check for any rejected item
-  for (const item of activeItems) {
-    const res = responseMap.get(item.id);
-    if (res && res.status === "rejected") {
-      return "rejected";
+  // If array of legacy ChecklistResponse
+  if (Array.isArray(dataOrResponses)) {
+    const responses = dataOrResponses;
+    const responseMap = new Map<string, ChecklistResponse>();
+    responses.forEach((r) => responseMap.set(r.checklistItemId, r));
+
+    for (const item of activeFields) {
+      const res = responseMap.get(item.id);
+      if (res && res.status === "rejected") {
+        return "rejected";
+      }
     }
+
+    for (const item of activeFields) {
+      if (!item.required) continue;
+      const res = responseMap.get(item.id);
+      if (!res || res.status !== "complete") {
+        return "incomplete";
+      }
+      if (item.evidenceEnabled && item.evidenceRequired) {
+        if (!res.evidence || res.evidence.length === 0) {
+          return "incomplete";
+        }
+      }
+    }
+
+    return "complete";
   }
 
-  // 2. Check for required items completion
-  for (const item of activeItems) {
-    if (!item.required) continue;
+  // Unified mode: participant.data Record<string, unknown>
+  const data = dataOrResponses || {};
 
-    const res = responseMap.get(item.id);
-    if (!res || res.status !== "complete") {
+  for (const field of activeFields) {
+    if (!field.required) continue;
+
+    // Check by excelColumn, id, or label
+    const val =
+      field.excelColumn && data[field.excelColumn] !== undefined
+        ? data[field.excelColumn]
+        : data[field.id] !== undefined
+          ? data[field.id]
+          : data[field.label];
+
+    if (val === undefined || val === null || val === "") {
       return "incomplete";
     }
 
-    // Check evidence required
-    if (item.evidenceEnabled && item.evidenceRequired) {
-      if (!res.evidence || res.evidence.length === 0) {
+    if (Array.isArray(val) && val.length === 0) {
+      return "incomplete";
+    }
+
+    if (field.type === "checkbox") {
+      // Checkbox is considered filled if true / "true" / "Ya" / 1
+      if (val !== true && val !== "true" && val !== "Ya" && val !== 1) {
         return "incomplete";
       }
     }
@@ -43,4 +79,3 @@ export function calculateParticipantStatus(
 
   return "complete";
 }
-

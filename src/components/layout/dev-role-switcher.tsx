@@ -148,11 +148,10 @@ export function DevRoleSwitcher() {
                 >
                   <div className="flex items-center gap-2 truncate">
                     <Icon
-                      className={`size-3.5 shrink-0 ${
-                        opt.role === "admin"
+                      className={`size-3.5 shrink-0 ${opt.role === "admin"
                           ? "text-primary"
                           : "text-muted-foreground"
-                      }`}
+                        }`}
                     />
                     <div className="flex flex-col truncate">
                       <span className="font-medium truncate">{opt.name}</span>

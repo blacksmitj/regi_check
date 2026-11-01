@@ -112,7 +112,7 @@ export default function OfficersPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Manajemen Petugas Registrasi</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Petugas yang emailnya terdaftar di sini dapat langsung masuk dan memeriksa checklist peserta.
+            Petugas yang emailnya terdaftar di sini dapat langsung masuk dan mengisi serta mengelola form peserta.
           </p>
         </div>
 
@@ -216,7 +216,7 @@ export default function OfficersPage() {
         {filtered.length === 0 ? (
           <EmptyState
             title="Tidak ada petugas ditemukan"
-            description="Daftarkan email petugas untuk memberikan akses pemeriksaan checklist kegiatan."
+            description="Daftarkan email petugas untuk memberikan akses pengelolaan form kegiatan."
             icon={Users2}
           />
         ) : (

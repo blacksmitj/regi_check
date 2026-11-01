@@ -31,7 +31,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, adminOnly: true },
   { label: "Pilih Kegiatan (Workspace)", href: "/workspaces", icon: FolderKanban },
-  { label: "Template Checklist", href: "/templates", icon: FileCheck2, adminOnly: true },
+  { label: "Template Form", href: "/templates", icon: FileCheck2, adminOnly: true },
   { label: "Petugas", href: "/officers", icon: Users2, adminOnly: true },
   { label: "Audit Log", href: "/audit-logs", icon: History, adminOnly: true },
   { label: "Profil", href: "/profile", icon: UserCircle },
@@ -97,11 +97,10 @@ function AppHeaderInner() {
                       key={item.href}
                       href={item.href}
                       onClick={() => setMobileOpen(false)}
-                      className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                        isActive
+                      className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive
                           ? "bg-primary text-primary-foreground"
                           : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                      }`}
+                        }`}
                     >
                       <Icon className="w-4 h-4" />
                       <span>{item.label}</span>
@@ -128,11 +127,10 @@ function AppHeaderInner() {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                    isActive
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${isActive
                       ? "bg-secondary text-foreground font-semibold shadow-xs"
                       : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                  }`}
+                    }`}
                 >
                   <Icon className="w-4 h-4" />
                   <span>{item.label}</span>

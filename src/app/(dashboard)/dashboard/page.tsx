@@ -151,7 +151,7 @@ export default function DashboardPage() {
 
               <Link href={`/workspaces/${currentWorkspace.id}`}>
                 <Button size="sm" className="gap-1.5 self-start">
-                  Buka Checklist Registrasi
+                  Buka Form Registrasi
                   <ArrowRight className="w-3.5 h-3.5" />
                 </Button>
               </Link>
@@ -161,7 +161,7 @@ export default function DashboardPage() {
           <CardContent className="p-5 pt-2">
             <div className="space-y-2">
               <div className="flex justify-between text-xs font-medium">
-                <span className="text-muted-foreground">Progres Kelengkapan Berkas:</span>
+                <span className="text-muted-foreground">Progres Pengisian Form:</span>
                 <span className="font-bold text-foreground">{progressPercent}% ({completeCount}/{totalParticipants} Peserta)</span>
               </div>
               <Progress value={progressPercent} className="h-2.5" />
@@ -171,7 +171,7 @@ export default function DashboardPage() {
       ) : (
         <EmptyState
           title="Belum ada workspace"
-          description="Buat workspace kegiatan pertama Anda untuk memulai pemeriksaan checklist registrasi peserta."
+          description="Buat workspace kegiatan pertama Anda untuk memulai pengisian form registrasi peserta."
         />
       )}
 

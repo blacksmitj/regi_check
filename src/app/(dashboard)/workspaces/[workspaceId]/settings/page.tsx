@@ -1,9 +1,9 @@
 import { Suspense } from "react";
-import { WorkspaceChecklistSettingsClient } from "@/features/workspace/components/workspace-checklist-settings-client";
+import { WorkspaceGeneralSettingsClient } from "@/features/workspace/components/workspace-general-settings-client";
 
 export const instant = false;
 
-export default async function WorkspaceChecklistSettingsPage({
+export default async function WorkspaceSettingsPage({
   params,
 }: {
   params: Promise<{ workspaceId: string }>;
@@ -14,11 +14,11 @@ export default async function WorkspaceChecklistSettingsPage({
     <Suspense
       fallback={
         <div className="flex-1 flex items-center justify-center p-12 text-xs text-muted-foreground">
-          Memuat pengaturan checklist...
+          Memuat pengaturan workspace...
         </div>
       }
     >
-      <WorkspaceChecklistSettingsClient workspaceId={workspaceId} />
+      <WorkspaceGeneralSettingsClient workspaceId={workspaceId} />
     </Suspense>
   );
 }

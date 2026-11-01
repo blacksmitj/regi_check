@@ -1,60 +1,208 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useState, useMemo } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardFooter,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import Link from "next/link";
 import * as XLSX from "xlsx";
 import {
   FileSpreadsheet,
   ArrowLeft,
+  ArrowRight,
   Upload,
   CheckCircle2,
   FileCheck,
   ChevronRight,
+  Download,
+  FileType,
+  Settings2,
+  AlertTriangle,
+  Users,
+  Search,
+  Check,
+  RefreshCw,
+  KeyRound,
+  ShieldAlert,
+  TableProperties,
 } from "lucide-react";
-import { MappingPresetsBar } from "@/features/excel-import/components/mapping-presets-bar";
+import { Participant } from "@/types/domain";
+
+interface AnalyzedRow {
+  rowIdx: number;
+  data: Record<string, unknown>;
+  keyValue: string;
+  isDuplicate: boolean;
+  duplicateType?: "workspace" | "internal" | "both";
+  existingId?: string;
+  existingParticipant?: Participant;
+  action: "create" | "overwrite" | "skip";
+}
 
 export function ImportParticipantsClient({ workspaceId }: { workspaceId: string }) {
-  const router = useRouter();
+  const queryClient = useQueryClient();
 
   const { data: workspace } = useQuery({
     queryKey: ["workspace", workspaceId],
     queryFn: () => api.getWorkspace(workspaceId),
   });
 
-  // Step 1: Upload, Step 2: Sheet & Mapping, Step 3: Preview & Confirm
+  const { data: existingParticipants = [] } = useQuery({
+    queryKey: ["participants", workspaceId],
+    queryFn: () => api.getParticipants(workspaceId),
+  });
+
+  // Flow Steps: 1 = Import Berkas & Kunci Unik, 2 = Cek Duplikasi, 3 = Finish
   const [step, setStep] = useState<1 | 2 | 3>(1);
+
+  // File parsing states
   const [workbook, setWorkbook] = useState<XLSX.WorkBook | null>(null);
   const [sheetNames, setSheetNames] = useState<string[]>([]);
   const [selectedSheet, setSelectedSheet] = useState<string>("");
   const [rawRows, setRawRows] = useState<Record<string, unknown>[]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
-  const [columnMapping, setColumnMapping] = useState<Record<string, string>>({});
-  const [importMode, setImportMode] = useState<"add" | "update">("add");
-  const [importResult, setImportResult] = useState<{ total: number; valid: number } | null>(null);
+  const [selectedKeyField, setSelectedKeyField] = useState<string>("");
 
-  // File parsing
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // File format & CSV delimiter
+  const [fileName, setFileName] = useState<string>("");
+  const [isCsv, setIsCsv] = useState<boolean>(false);
+  const [csvContent, setCsvContent] = useState<string | null>(null);
+  const [delimiter, setDelimiter] = useState<string>(",");
 
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      const bstr = evt.target?.result;
-      const wb = XLSX.read(bstr, { type: "binary" });
+  // Step 2: Duplication analysis state
+  const [analyzedRows, setAnalyzedRows] = useState<AnalyzedRow[]>([]);
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [filterTab, setFilterTab] = useState<"all" | "duplicates" | "new">("all");
+
+  // Step 3: Result state
+  const [importResult, setImportResult] = useState<{
+    total: number;
+    importedCount: number;
+    createdCount: number;
+    updatedCount: number;
+    skippedCount: number;
+  } | null>(null);
+
+  // Detect CSV delimiter
+  const detectDelimiter = (text: string): string => {
+    const firstLine = text.split(/\r\n|\n/)[0] || "";
+    const counts = {
+      ",": (firstLine.match(/,/g) || []).length,
+      ";": (firstLine.match(/;/g) || []).length,
+      "\t": (firstLine.match(/\t/g) || []).length,
+    };
+    if (counts[";"] > counts[","] && counts[";"] > counts["\t"]) return ";";
+    if (counts["\t"] > counts[","] && counts["\t"] > counts[";"]) return "\t";
+    return ",";
+  };
+
+  const parseCsvText = (text: string, delim: string) => {
+    try {
+      const wb = XLSX.read(text, { type: "string", FS: delim });
       setWorkbook(wb);
       setSheetNames(wb.SheetNames);
       if (wb.SheetNames.length > 0) {
         loadSheetData(wb, wb.SheetNames[0]);
       }
-      setStep(2);
-    };
-    reader.readAsBinaryString(file);
+    } catch (err) {
+      console.error("Gagal membaca file CSV:", err);
+    }
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setFileName(file.name);
+    const isFileCsv = file.name.toLowerCase().endsWith(".csv");
+    setIsCsv(isFileCsv);
+
+    if (isFileCsv) {
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        const text = (evt.target?.result as string) || "";
+        setCsvContent(text);
+        const detectedDelim = detectDelimiter(text);
+        setDelimiter(detectedDelim);
+        parseCsvText(text, detectedDelim);
+      };
+      reader.readAsText(file, "UTF-8");
+    } else {
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: "binary" });
+        setWorkbook(wb);
+        setSheetNames(wb.SheetNames);
+        if (wb.SheetNames.length > 0) {
+          loadSheetData(wb, wb.SheetNames[0]);
+        }
+      };
+      reader.readAsBinaryString(file);
+    }
+  };
+
+  const handleDelimiterChange = (newDelim: string) => {
+    setDelimiter(newDelim);
+    if (csvContent) {
+      parseCsvText(csvContent, newDelim);
+    }
+  };
+
+  const downloadSampleCsv = () => {
+    const csvData = [
+      "Nama Lengkap,NIK,Email,Nomor HP,Asal Kota",
+      "Budi Santoso,3201234567890001,budi@example.com,08123456789,Jakarta",
+      "Siti Rahma,3201234567890002,siti@example.com,08129876543,Bandung",
+      "Ahmad Fauzi,3201234567890003,ahmad@example.com,08131122334,Surabaya",
+    ].join("\r\n");
+
+    const blob = new Blob(["\uFEFF" + csvData], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", "template_peserta.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const downloadSampleExcel = () => {
+    const wsData = [
+      ["Nama Lengkap", "NIK", "Email", "Nomor HP", "Asal Kota"],
+      ["Budi Santoso", "3201234567890001", "budi@example.com", "08123456789", "Jakarta"],
+      ["Siti Rahma", "3201234567890002", "siti@example.com", "08129876543", "Bandung"],
+      ["Ahmad Fauzi", "3201234567890003", "ahmad@example.com", "08131122334", "Surabaya"],
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Data Peserta");
+    XLSX.writeFile(wb, "template_peserta.xlsx");
   };
 
   const loadSheetData = (wb: XLSX.WorkBook, sheetName: string) => {
@@ -67,256 +215,833 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
       const cols = Object.keys(data[0]);
       setHeaders(cols);
 
-      // Auto-detect mappings (§6.3)
-      const mapping: Record<string, string> = {};
-      cols.forEach((col) => {
-        const lower = col.toLowerCase();
-        if (lower.includes("nama")) mapping[col] = "Nama Lengkap";
-        else if (lower.includes("nik") || lower.includes("ktp")) mapping[col] = "NIK";
-        else if (lower.includes("email")) mapping[col] = "Email";
-        else if (lower.includes("hp") || lower.includes("telepon") || lower.includes("wa"))
-          mapping[col] = "Nomor HP";
-        else if (lower.includes("kota") || lower.includes("asal")) mapping[col] = "Asal Kota";
-        else mapping[col] = col;
+      // Smart auto-detect key field
+      let detectedKey = cols[0];
+      const foundKey = cols.find((c) => {
+        const l = c.toLowerCase();
+        return l.includes("nik") || l.includes("ktp") || l.includes("id") || l.includes("nomor");
       });
-      setColumnMapping(mapping);
+      if (foundKey) {
+        detectedKey = foundKey;
+      } else {
+        const emailKey = cols.find((c) => c.toLowerCase().includes("email"));
+        if (emailKey) detectedKey = emailKey;
+      }
+
+      setSelectedKeyField(detectedKey);
     }
   };
 
+  // Compute duplicate analysis when advancing to Step 2
+  const runDuplicationCheck = () => {
+    const seenFileKeys = new Map<string, number>();
+    const list: AnalyzedRow[] = [];
+
+    rawRows.forEach((row, rowIdx) => {
+      // Use original row data directly as participant data
+      const data = { ...row };
+
+      const rawKeyValue = row[selectedKeyField] ?? "";
+      const keyValue = String(rawKeyValue).trim();
+      const lowerKey = keyValue.toLowerCase();
+
+      let isDuplicate = false;
+      let duplicateType: "workspace" | "internal" | "both" | undefined;
+      let existingId: string | undefined;
+      let existingParticipant: Participant | undefined;
+
+      if (lowerKey !== "") {
+        // 1. Check against workspace existing participants
+        const matchedParticipant = existingParticipants.find((p) => {
+          const valInP = String(p.data[selectedKeyField] ?? "").trim().toLowerCase();
+          return valInP !== "" && valInP === lowerKey;
+        });
+
+        const isWorkspaceDuplicate = !!matchedParticipant;
+        if (matchedParticipant) {
+          existingId = matchedParticipant.id;
+          existingParticipant = matchedParticipant;
+        }
+
+        // 2. Check internal duplicate in the file
+        const isInternalDuplicate = seenFileKeys.has(lowerKey);
+
+        if (isWorkspaceDuplicate && isInternalDuplicate) {
+          isDuplicate = true;
+          duplicateType = "both";
+        } else if (isWorkspaceDuplicate) {
+          isDuplicate = true;
+          duplicateType = "workspace";
+        } else if (isInternalDuplicate) {
+          isDuplicate = true;
+          duplicateType = "internal";
+        }
+
+        seenFileKeys.set(lowerKey, rowIdx);
+      }
+
+      list.push({
+        rowIdx,
+        data,
+        keyValue: keyValue || `(Baris ${rowIdx + 1}: Tanpa ${selectedKeyField})`,
+        isDuplicate,
+        duplicateType,
+        existingId,
+        existingParticipant,
+        action: isDuplicate ? "overwrite" : "create",
+      });
+    });
+
+    setAnalyzedRows(list);
+    setSearchQuery("");
+    setFilterTab("all");
+    setStep(2);
+  };
+
+  // Bulk actions for duplicates
+  const setAllDuplicatesAction = (action: "overwrite" | "skip") => {
+    setAnalyzedRows((prev) =>
+      prev.map((row) => (row.isDuplicate ? { ...row, action } : row))
+    );
+  };
+
+  // Per-row action toggle
+  const setRowAction = (rowIdx: number, action: "overwrite" | "skip") => {
+    setAnalyzedRows((prev) =>
+      prev.map((row) => (row.rowIdx === rowIdx ? { ...row, action } : row))
+    );
+  };
+
+  // Counters for Step 2
+  const duplicatesCount = useMemo(
+    () => analyzedRows.filter((r) => r.isDuplicate).length,
+    [analyzedRows]
+  );
+  const newCount = useMemo(
+    () => analyzedRows.filter((r) => !r.isDuplicate).length,
+    [analyzedRows]
+  );
+  const readyToImportCount = useMemo(
+    () => analyzedRows.filter((r) => r.action !== "skip").length,
+    [analyzedRows]
+  );
+
+  // Filtered rows for Step 2 table preview
+  const filteredAnalyzedRows = useMemo(() => {
+    return analyzedRows.filter((item) => {
+      if (filterTab === "duplicates" && !item.isDuplicate) return false;
+      if (filterTab === "new" && item.isDuplicate) return false;
+
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase();
+      const matchKey = item.keyValue.toLowerCase().includes(q);
+      const matchAnyData = Object.values(item.data).some((val) =>
+        String(val || "").toLowerCase().includes(q)
+      );
+      return matchKey || matchAnyData;
+    });
+  }, [analyzedRows, filterTab, searchQuery]);
+
+  // Secondary preview columns for Step 2 table (2-3 first columns other than the key)
+  const secondaryPreviewHeaders = useMemo(() => {
+    return headers.filter((h) => h !== selectedKeyField).slice(0, 3);
+  }, [headers, selectedKeyField]);
+
+  // Import mutation
   const importMutation = useMutation({
     mutationFn: async () => {
-      const formatted = rawRows.map((row) => {
-        const data: Record<string, unknown> = {};
-        Object.entries(row).forEach(([colKey, val]) => {
-          const targetField = columnMapping[colKey] || colKey;
-          data[targetField] = val;
-        });
-        return { data };
-      });
+      const payload = analyzedRows.map((r) => ({
+        data: r.data,
+        action: r.action,
+        existingId: r.existingId,
+      }));
 
-      return api.importParticipants(workspaceId, formatted);
+      return api.importParticipants(workspaceId, payload);
     },
     onSuccess: (res) => {
-      setImportResult({ total: rawRows.length, valid: res.importedCount });
+      setImportResult(res);
+      queryClient.invalidateQueries({ queryKey: ["participants", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ["workspace", workspaceId] });
       setStep(3);
     },
   });
 
+  const resetImportFlow = () => {
+    setWorkbook(null);
+    setSheetNames([]);
+    setSelectedSheet("");
+    setRawRows([]);
+    setHeaders([]);
+    setSelectedKeyField("");
+    setFileName("");
+    setCsvContent(null);
+    setAnalyzedRows([]);
+    setImportResult(null);
+    setStep(1);
+  };
+
   return (
-    <div className="flex-1 p-6 max-w-5xl mx-auto w-full space-y-6">
-      <div className="flex items-center gap-3 border-b border-border pb-4">
-        <Link href={`/workspaces/${workspaceId}`}>
-          <Button variant="ghost" size="icon">
-            <ArrowLeft className="w-4 h-4" />
+    <div className="flex-1 p-6 max-w-6xl mx-auto w-full space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-border pb-4">
+        <div className="flex items-center gap-3">
+          <Link href={`/workspaces/${workspaceId}`}>
+            <Button variant="ghost" size="icon">
+              <ArrowLeft className="w-4 h-4" />
+            </Button>
+          </Link>
+          <div>
+            <h1 className="text-xl font-bold tracking-tight">Import Data Peserta</h1>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Workspace: <span className="font-semibold text-foreground">{workspace?.name || "..."}</span>
+            </p>
+          </div>
+        </div>
+
+        {step < 3 && rawRows.length > 0 && (
+          <Button variant="outline" size="sm" onClick={resetImportFlow} className="text-xs">
+            Mulai Ulang Berkas
           </Button>
-        </Link>
-        <div>
-          <h1 className="text-xl font-bold tracking-tight">Dynamic Excel Import Wizard</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Workspace: <span className="font-semibold text-foreground">{workspace?.name}</span>
-          </p>
+        )}
+      </div>
+
+      {/* Stepper Progress */}
+      <div className="flex items-center gap-2 text-xs font-medium">
+        <div
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors ${step === 1
+              ? "bg-primary text-primary-foreground font-semibold shadow-xs"
+              : "bg-muted text-muted-foreground"
+            }`}
+        >
+          <span className="w-4 h-4 rounded-full bg-background/20 flex items-center justify-center text-[10px] font-bold">
+            1
+          </span>
+          <span>Import Data Peserta</span>
+        </div>
+
+        <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
+
+        <div
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors ${step === 2
+              ? "bg-primary text-primary-foreground font-semibold shadow-xs"
+              : "bg-muted text-muted-foreground"
+            }`}
+        >
+          <span className="w-4 h-4 rounded-full bg-background/20 flex items-center justify-center text-[10px] font-bold">
+            2
+          </span>
+          <span>Cek Duplikasi (Timpa / Skip)</span>
+        </div>
+
+        <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
+
+        <div
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors ${step === 3
+              ? "bg-primary text-primary-foreground font-semibold shadow-xs"
+              : "bg-muted text-muted-foreground"
+            }`}
+        >
+          <span className="w-4 h-4 rounded-full bg-background/20 flex items-center justify-center text-[10px] font-bold">
+            3
+          </span>
+          <span>Finish (Selesai)</span>
         </div>
       </div>
 
-      {/* Step Indicators */}
-      <div className="flex items-center gap-2 text-xs font-medium">
-        <span className={`px-2.5 py-1 rounded-md ${step === 1 ? "bg-primary text-primary-foreground font-bold" : "bg-muted text-muted-foreground"}`}>
-          1. Upload Berkas Excel
-        </span>
-        <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
-        <span className={`px-2.5 py-1 rounded-md ${step === 2 ? "bg-primary text-primary-foreground font-bold" : "bg-muted text-muted-foreground"}`}>
-          2. Mapping Kolom & Tipe
-        </span>
-        <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
-        <span className={`px-2.5 py-1 rounded-md ${step === 3 ? "bg-primary text-primary-foreground font-bold" : "bg-muted text-muted-foreground"}`}>
-          3. Selesai & Hasil
-        </span>
-      </div>
-
-      {/* STEP 1: Upload */}
+      {/* =========================================================================
+          LANGKAH 1: IMPORT DATA PESERTA & PILIH KUNCI IDENTITAS UNIK
+      ========================================================================= */}
       {step === 1 && (
-        <Card className="border shadow-xs">
-          <CardHeader>
-            <CardTitle className="text-base font-semibold">Pilih Berkas Spreadsheet</CardTitle>
-            <CardDescription className="text-xs">
-              Mendukung file .xlsx dan .xls dengan format kolom dinamis.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="border-2 border-dashed border-border rounded-xl p-10 flex flex-col items-center justify-center text-center bg-card/40">
-              <FileSpreadsheet className="w-12 h-12 text-emerald-600 mb-3" />
-              <p className="text-sm font-semibold mb-1">Pilih File Excel Peserta</p>
-              <p className="text-xs text-muted-foreground max-w-sm mb-4">
-                Header kolom tidak harus baku. Anda dapat memetakan kolom di langkah selanjutnya.
-              </p>
-              <label className="cursor-pointer">
-                <input
-                  type="file"
-                  accept=".xlsx, .xls"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                />
-                <Button size="sm" className="gap-2 pointer-events-none">
-                  <Upload className="w-4 h-4" />
-                  Unggah Berkas Excel
-                </Button>
-              </label>
+        <div className="space-y-6">
+          {/* Card 1A: File Upload */}
+          {rawRows.length === 0 ? (
+            <Card className="border shadow-xs">
+              <CardHeader>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <CardTitle className="text-base font-semibold">Pilih Berkas Peserta</CardTitle>
+                    <CardDescription className="text-xs">
+                      Mendukung file format <strong>.csv</strong>, <strong>.xlsx</strong>, dan <strong>.xls</strong>. Data akan disimpan langsung sesuai nama header berkas.
+                    </CardDescription>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={downloadSampleCsv}
+                      className="text-xs gap-1.5 h-8"
+                    >
+                      <Download className="w-3.5 h-3.5 text-blue-600" />
+                      Template CSV
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={downloadSampleExcel}
+                      className="text-xs gap-1.5 h-8"
+                    >
+                      <Download className="w-3.5 h-3.5 text-emerald-600" />
+                      Template Excel
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="border-2 border-dashed border-border rounded-xl p-12 flex flex-col items-center justify-center text-center bg-card/40">
+                  <div className="flex items-center justify-center gap-2 mb-3">
+                    <FileType className="w-10 h-10 text-blue-600" />
+                    <FileSpreadsheet className="w-10 h-10 text-emerald-600" />
+                  </div>
+                  <p className="text-sm font-semibold mb-1">Pilih File CSV atau Excel Peserta</p>
+                  <p className="text-xs text-muted-foreground max-w-sm mb-5">
+                    Data kolom akan disimpan persis sesuai nama header yang ada di dalam berkas Anda.
+                  </p>
+                  <label className="cursor-pointer">
+                    <input
+                      type="file"
+                      accept=".csv, .xlsx, .xls, text/csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                    />
+                    <Button size="sm" className="gap-2 pointer-events-none">
+                      <Upload className="w-4 h-4" />
+                      Pilih & Unggah Berkas
+                    </Button>
+                  </label>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            /* Card 1B: File Details, Unique Key Selector, & Preview Table */
+            <div className="space-y-5">
+              <Card className="shadow-xs border">
+                <CardHeader className="pb-3 border-b">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <CardTitle className="text-base font-semibold">
+                          Informasi Berkas Peserta
+                        </CardTitle>
+                        <Badge variant={isCsv ? "secondary" : "default"} className="text-[10px]">
+                          {isCsv ? "Format CSV" : "Format Excel"}
+                        </Badge>
+                      </div>
+                      <CardDescription className="text-xs mt-0.5">
+                        Berkas: <span className="font-medium text-foreground">{fileName}</span> — {rawRows.length} baris data, {headers.length} kolom terdeteksi.
+                      </CardDescription>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {isCsv && (
+                        <div className="flex items-center gap-1.5 bg-muted/60 px-2.5 py-1 rounded-md border text-xs">
+                          <Settings2 className="w-3.5 h-3.5 text-muted-foreground" />
+                          <span className="text-[11px] text-muted-foreground whitespace-nowrap">Pemisah Kolom:</span>
+                          <Select
+                            value={delimiter}
+                            onValueChange={(val) => {
+                              if (val) handleDelimiterChange(val);
+                            }}
+                          >
+                            <SelectTrigger className="h-7 text-xs min-w-28 bg-background">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value=",">Koma (,)</SelectItem>
+                              <SelectItem value=";">Titik Koma (;)</SelectItem>
+                              <SelectItem value="	">Tab (\t)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+
+                      {!isCsv && sheetNames.length > 1 && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground whitespace-nowrap">Pilih Sheet:</span>
+                          <Select
+                            value={selectedSheet}
+                            onValueChange={(val) => {
+                              if (val && workbook) loadSheetData(workbook, val);
+                            }}
+                          >
+                            <SelectTrigger className="h-8 text-xs min-w-32">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {sheetNames.map((s) => (
+                                <SelectItem key={s} value={s}>
+                                  {s}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+
+                      <label className="cursor-pointer">
+                        <input
+                          type="file"
+                          accept=".csv, .xlsx, .xls, text/csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
+                          onChange={handleFileUpload}
+                          className="hidden"
+                        />
+                        <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 pointer-events-none">
+                          <Upload className="w-3.5 h-3.5" />
+                          Ganti File
+                        </Button>
+                      </label>
+                    </div>
+                  </div>
+                </CardHeader>
+
+                <CardContent className="space-y-6 pt-5">
+                  {/* Selector: Unique Identifier Key */}
+                  <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <KeyRound className="w-4 h-4 text-primary" />
+                        <span className="text-xs font-bold text-foreground">
+                          Kunci Identitas Unik (Identifier Duplikasi)
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Pilih nama kolom header yang menjadi acuan untuk mendeteksi apakah data pada berkas sudah ada sebelumnya atau ganda.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2 min-w-[220px]">
+                      <Select
+                        value={selectedKeyField}
+                        onValueChange={(val) => {
+                          if (val) setSelectedKeyField(val);
+                        }}
+                      >
+                        <SelectTrigger className="h-9 text-xs bg-background">
+                          <SelectValue placeholder="Pilih Kolom Kunci" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {headers.map((col) => (
+                            <SelectItem key={col} value={col} className="text-xs">
+                              {col}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  {/* Mini Preview Table (First 3-5 rows) */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                        <TableProperties className="w-3.5 h-3.5" />
+                        <span>Pratinjau Data Berkas (5 Baris Pertama)</span>
+                      </div>
+                      <span className="text-[11px] text-muted-foreground">
+                        Data disimpan sesuai header asli
+                      </span>
+                    </div>
+
+                    <div className="rounded-lg border overflow-x-auto bg-card">
+                      <Table>
+                        <TableHeader className="bg-muted/40">
+                          <TableRow>
+                            <TableHead className="w-12 text-[11px] font-bold">#</TableHead>
+                            {headers.map((col) => (
+                              <TableHead key={col} className="text-[11px] font-bold whitespace-nowrap">
+                                <div className="flex items-center gap-1.5">
+                                  <span>{col}</span>
+                                  {col === selectedKeyField && (
+                                    <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-primary/15 text-primary border-0">
+                                      Kunci
+                                    </Badge>
+                                  )}
+                                </div>
+                              </TableHead>
+                            ))}
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {rawRows.slice(0, 5).map((row, idx) => (
+                            <TableRow key={idx}>
+                              <TableCell className="text-xs text-muted-foreground">{idx + 1}</TableCell>
+                              {headers.map((col) => (
+                                <TableCell
+                                  key={col}
+                                  className={`text-xs whitespace-nowrap ${col === selectedKeyField ? "font-semibold text-foreground bg-primary/[0.03]" : "text-muted-foreground"
+                                    }`}
+                                >
+                                  {String(row[col] ?? "-")}
+                                </TableCell>
+                              ))}
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                </CardContent>
+
+                <CardFooter className="flex justify-between border-t border-border pt-4">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setRawRows([]);
+                      setHeaders([]);
+                    }}
+                    className="text-xs"
+                  >
+                    Batal
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={runDuplicationCheck}
+                    disabled={!selectedKeyField}
+                    className="text-xs gap-1.5"
+                  >
+                    Lanjut ke Cek Duplikasi
+                    <ArrowRight className="w-4 h-4" />
+                  </Button>
+                </CardFooter>
+              </Card>
             </div>
-          </CardContent>
-        </Card>
+          )}
+        </div>
       )}
 
-      {/* STEP 2: Sheet Selector & Column Mapping */}
+      {/* =========================================================================
+          LANGKAH 2: CEK DUPLIKASI (TIMPA ATAU SKIP)
+      ========================================================================= */}
       {step === 2 && (
-        <div className="space-y-4">
-          <MappingPresetsBar
-            currentMapping={columnMapping}
-            onApplyPreset={(preset) => {
-              setColumnMapping((prev) => ({ ...prev, ...preset }));
-            }}
-          />
-
-          <Card className="shadow-xs">
-            <CardHeader className="pb-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div className="space-y-5">
+          {/* Summary Badges Card */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Card className="border shadow-xs">
+              <CardContent className="p-4 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-blue-500/10 text-blue-600 flex items-center justify-center">
+                  <Users className="w-5 h-5" />
+                </div>
                 <div>
-                  <CardTitle className="text-base font-semibold">Pemetaan Kolom (Column Mapping)</CardTitle>
-                  <CardDescription className="text-xs">
-                    Cocokkan kolom Excel dengan atribut data peserta kegiatan.
+                  <p className="text-xs text-muted-foreground">Total Data File</p>
+                  <p className="text-xl font-bold">{analyzedRows.length}</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border shadow-xs">
+              <CardContent className="p-4 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
+                  <CheckCircle2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Data Baru</p>
+                  <p className="text-xl font-bold text-emerald-600">{newCount}</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border shadow-xs">
+              <CardContent className="p-4 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-amber-500/10 text-amber-600 flex items-center justify-center">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Terdeteksi Duplikat</p>
+                  <p className="text-xl font-bold text-amber-600">{duplicatesCount}</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Mass Action & Filter Toolbar */}
+          <Card className="border shadow-xs">
+            <CardHeader className="pb-3 border-b">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                <div>
+                  <CardTitle className="text-base font-semibold">
+                    Review Duplikasi & Tindakan
+                  </CardTitle>
+                  <CardDescription className="text-xs mt-0.5">
+                    Acuan Kunci: <Badge variant="outline" className="text-[10px] ml-1">{selectedKeyField}</Badge>
+                    {" — "}Tentukan apakah data yang terdeteksi duplikat ingin <strong>Ditimpa (Update)</strong> atau <strong>Dilewati (Skip)</strong>.
                   </CardDescription>
                 </div>
 
-                {sheetNames.length > 1 && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">Pilih Sheet:</span>
-                    <select
-                      value={selectedSheet}
-                      onChange={(e) => {
-                        if (workbook) loadSheetData(workbook, e.target.value);
-                      }}
-                      className="h-8 rounded-md border border-input bg-background px-2 text-xs shadow-xs"
+                {/* Bulk Actions */}
+                {duplicatesCount > 0 && (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs text-muted-foreground font-medium">Aksi Massal Duplikat:</span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setAllDuplicatesAction("overwrite")}
+                      className="text-xs h-8 border-amber-500/40 text-amber-700 hover:bg-amber-50"
                     >
-                      {sheetNames.map((s) => (
-                        <option key={s} value={s}>
-                          {s}
-                        </option>
-                      ))}
-                    </select>
+                      <RefreshCw className="w-3.5 h-3.5 mr-1 text-amber-600" />
+                      Timpa Semua Duplikat
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setAllDuplicatesAction("skip")}
+                      className="text-xs h-8 text-muted-foreground hover:bg-muted"
+                    >
+                      <ShieldAlert className="w-3.5 h-3.5 mr-1" />
+                      Lewati Semua Duplikat
+                    </Button>
                   </div>
                 )}
               </div>
             </CardHeader>
 
-            <CardContent className="space-y-4">
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {headers.map((col) => (
-                  <div key={col} className="p-3 rounded-lg border bg-muted/20 space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold truncate max-w-[150px]">{col}</span>
-                      <Badge variant="outline" className="text-[9px]">
-                        Excel
-                      </Badge>
-                    </div>
-                    <p className="text-[10px] text-muted-foreground truncate">
-                      Contoh: {String(rawRows[0]?.[col] || "-")}
-                    </p>
-                    <select
-                      value={columnMapping[col] || col}
-                      onChange={(e) =>
-                        setColumnMapping({ ...columnMapping, [col]: e.target.value })
-                      }
-                      className="w-full h-7 rounded border border-input bg-background px-2 text-xs shadow-xs"
-                    >
-                      <option value="Nama Lengkap">Nama Lengkap</option>
-                      <option value="NIK">NIK (Identitas Utama)</option>
-                      <option value="Email">Email</option>
-                      <option value="Nomor HP">Nomor HP</option>
-                      <option value="Asal Kota">Asal Kota / Wilayah</option>
-                      <option value={col}>Tetap ({col})</option>
-                    </select>
-                  </div>
-                ))}
-              </div>
-
-              {/* Import Mode: Add or Update (§6.5) */}
-              <div className="border-t border-border pt-3 flex flex-wrap items-center justify-between gap-3 text-xs">
-                <div className="flex items-center gap-3">
-                  <span className="font-semibold text-foreground">Mode Import:</span>
-                  <label className="flex items-center gap-1.5 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="mode"
-                      checked={importMode === "add"}
-                      onChange={() => setImportMode("add")}
-                    />
-                    <span>Mode 1 — Tambah Peserta Baru</span>
-                  </label>
-                  <label className="flex items-center gap-1.5 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="mode"
-                      checked={importMode === "update"}
-                      onChange={() => setImportMode("update")}
-                    />
-                    <span>Mode 2 — Update Data Peserta via NIK</span>
-                  </label>
+            <CardContent className="p-4 space-y-4">
+              {/* Filter Tabs & Search */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div className="flex items-center gap-1.5 bg-muted/60 p-1 rounded-lg border text-xs w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={() => setFilterTab("all")}
+                    className={`px-3 py-1 rounded-md transition-colors text-xs font-medium ${filterTab === "all"
+                        ? "bg-background text-foreground shadow-xs font-semibold"
+                        : "text-muted-foreground hover:text-foreground"
+                      }`}
+                  >
+                    Semua ({analyzedRows.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterTab("duplicates")}
+                    className={`px-3 py-1 rounded-md transition-colors text-xs font-medium ${filterTab === "duplicates"
+                        ? "bg-background text-amber-600 shadow-xs font-semibold"
+                        : "text-muted-foreground hover:text-amber-600"
+                      }`}
+                  >
+                    Duplikat ({duplicatesCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterTab("new")}
+                    className={`px-3 py-1 rounded-md transition-colors text-xs font-medium ${filterTab === "new"
+                        ? "bg-background text-emerald-600 shadow-xs font-semibold"
+                        : "text-muted-foreground hover:text-emerald-600"
+                      }`}
+                  >
+                    Data Baru ({newCount})
+                  </button>
                 </div>
 
-                <span className="text-muted-foreground font-medium">
-                  {rawRows.length} baris data siap diimpor
-                </span>
+                <div className="relative w-full sm:w-64">
+                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
+                  <Input
+                    placeholder={`Cari ${selectedKeyField} atau data lainnya...`}
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="h-8 pl-8 text-xs"
+                  />
+                </div>
+              </div>
+
+              {/* Table Preview */}
+              <div className="rounded-lg border overflow-x-auto">
+                <Table>
+                  <TableHeader className="bg-muted/40">
+                    <TableRow>
+                      <TableHead className="w-12 text-[11px] font-bold">#</TableHead>
+                      <TableHead className="text-[11px] font-bold">{selectedKeyField} (Identifier)</TableHead>
+                      {secondaryPreviewHeaders.map((col) => (
+                        <TableHead key={col} className="text-[11px] font-bold whitespace-nowrap">
+                          {col}
+                        </TableHead>
+                      ))}
+                      <TableHead className="text-[11px] font-bold">Status Deteksi</TableHead>
+                      <TableHead className="w-48 text-[11px] font-bold text-right">Tindakan</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredAnalyzedRows.length === 0 ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={4 + secondaryPreviewHeaders.length}
+                          className="text-center py-8 text-xs text-muted-foreground"
+                        >
+                          Tidak ada data yang cocok dengan filter.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      filteredAnalyzedRows.map((row) => (
+                        <TableRow
+                          key={row.rowIdx}
+                          className={row.isDuplicate ? "bg-amber-500/[0.03]" : ""}
+                        >
+                          <TableCell className="text-xs text-muted-foreground">
+                            {row.rowIdx + 1}
+                          </TableCell>
+                          <TableCell className="text-xs font-mono font-medium">
+                            {row.keyValue}
+                          </TableCell>
+                          {secondaryPreviewHeaders.map((col) => (
+                            <TableCell key={col} className="text-xs text-muted-foreground max-w-[150px] truncate">
+                              {String(row.data[col] ?? "-")}
+                            </TableCell>
+                          ))}
+                          <TableCell>
+                            {!row.isDuplicate ? (
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] font-medium border-emerald-500/40 text-emerald-600 bg-emerald-50/50"
+                              >
+                                Data Baru
+                              </Badge>
+                            ) : row.duplicateType === "workspace" ? (
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] font-medium border-amber-500/40 text-amber-700 bg-amber-50/60"
+                              >
+                                Ada di Workspace
+                              </Badge>
+                            ) : row.duplicateType === "internal" ? (
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] font-medium border-blue-500/40 text-blue-700 bg-blue-50/60"
+                              >
+                                Duplikat di Berkas
+                              </Badge>
+                            ) : (
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] font-medium border-purple-500/40 text-purple-700 bg-purple-50/60"
+                              >
+                                Workspace & Berkas
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {!row.isDuplicate ? (
+                              <span className="text-xs text-muted-foreground inline-flex items-center gap-1">
+                                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                Tambah Baru
+                              </span>
+                            ) : (
+                              <div className="flex items-center justify-end">
+                                <Select
+                                  value={row.action}
+                                  onValueChange={(val) => {
+                                    if (val === "overwrite" || val === "skip") {
+                                      setRowAction(row.rowIdx, val);
+                                    }
+                                  }}
+                                >
+                                  <SelectTrigger
+                                    className={`h-7 text-xs min-w-32 ${row.action === "overwrite"
+                                        ? "border-amber-400 text-amber-700 font-medium bg-amber-50/40"
+                                        : "text-muted-foreground bg-muted/40"
+                                      }`}
+                                  >
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="overwrite" className="text-xs">
+                                      Timpa (Update Data)
+                                    </SelectItem>
+                                    <SelectItem value="skip" className="text-xs text-muted-foreground">
+                                      Lewati (Skip)
+                                    </SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
               </div>
             </CardContent>
 
-            <CardFooter className="flex justify-between border-t border-border pt-4">
-              <Button size="sm" variant="outline" onClick={() => setStep(1)} className="text-xs">
-                Ganti Berkas
-              </Button>
+            <CardFooter className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-border pt-4">
               <Button
                 size="sm"
-                onClick={() => importMutation.mutate()}
-                disabled={importMutation.isPending}
-                className="text-xs gap-1.5"
+                variant="outline"
+                onClick={() => setStep(1)}
+                className="text-xs gap-1.5 w-full sm:w-auto"
               >
-                {importMutation.isPending ? "Memproses..." : "Konfirmasi & Mulai Import"}
+                <ArrowLeft className="w-3.5 h-3.5" />
+                Kembali ke Berkas
               </Button>
+
+              <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+                <span className="text-xs text-muted-foreground">
+                  {readyToImportCount} data akan diproses
+                </span>
+                <Button
+                  size="sm"
+                  onClick={() => importMutation.mutate()}
+                  disabled={importMutation.isPending || readyToImportCount === 0}
+                  className="text-xs gap-1.5 w-full sm:w-auto"
+                >
+                  {importMutation.isPending ? "Memproses Import..." : "Konfirmasi & Mulai Import"}
+                  <ArrowRight className="w-4 h-4" />
+                </Button>
+              </div>
             </CardFooter>
           </Card>
         </div>
       )}
 
-      {/* STEP 3: Result (§6.6) */}
+      {/* =========================================================================
+          LANGKAH 3: FINISH (SELESAI & RANGKUMAN)
+      ========================================================================= */}
       {step === 3 && importResult && (
-        <Card className="border shadow-xs text-center py-6">
-          <CardContent className="space-y-4">
-            <div className="w-12 h-12 rounded-full bg-emerald-500/10 text-emerald-600 flex items-center justify-center mx-auto">
-              <CheckCircle2 className="w-7 h-7" />
+        <Card className="border shadow-xs text-center py-8">
+          <CardContent className="space-y-6 max-w-2xl mx-auto">
+            <div className="w-14 h-14 rounded-full bg-emerald-500/10 text-emerald-600 flex items-center justify-center mx-auto">
+              <CheckCircle2 className="w-8 h-8" />
             </div>
+
             <div>
-              <CardTitle className="text-lg font-bold">Import Peserta Berhasil!</CardTitle>
-              <CardDescription className="text-xs max-w-sm mx-auto mt-1">
-                Data peserta telah berhasil dimasukkan ke dalam workspace kegiatan.
+              <CardTitle className="text-xl font-bold">Import Peserta Berhasil Selesai!</CardTitle>
+              <CardDescription className="text-xs max-w-md mx-auto mt-1.5">
+                Data peserta telah berhasil diproses ke dalam workspace kegiatan sesuai instruksi duplikasi yang Anda tentukan.
               </CardDescription>
             </div>
 
-            <div className="inline-grid grid-cols-2 gap-4 p-4 rounded-xl bg-muted/30 border border-border text-left mx-auto">
-              <div>
-                <p className="text-[11px] text-muted-foreground">Total Baris Excel:</p>
-                <p className="text-base font-bold">{importResult.total}</p>
+            {/* 4 Statistik Ringkasan Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-left">
+              <div className="p-3.5 rounded-xl bg-muted/40 border border-border">
+                <p className="text-[11px] text-muted-foreground">Total Berkas:</p>
+                <p className="text-lg font-bold mt-0.5">{importResult.total}</p>
               </div>
-              <div>
-                <p className="text-[11px] text-muted-foreground">Berhasil Dimasukkan:</p>
-                <p className="text-base font-bold text-emerald-600">{importResult.valid}</p>
+              <div className="p-3.5 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
+                <p className="text-[11px] text-emerald-600 font-medium">Data Baru Ditambah:</p>
+                <p className="text-lg font-bold text-emerald-600 mt-0.5">{importResult.createdCount}</p>
+              </div>
+              <div className="p-3.5 rounded-xl bg-amber-500/5 border border-amber-500/20">
+                <p className="text-[11px] text-amber-700 font-medium">Data Ditimpa:</p>
+                <p className="text-lg font-bold text-amber-700 mt-0.5">{importResult.updatedCount}</p>
+              </div>
+              <div className="p-3.5 rounded-xl bg-muted/40 border border-border">
+                <p className="text-[11px] text-muted-foreground">Dilewati (Skip):</p>
+                <p className="text-lg font-bold text-muted-foreground mt-0.5">{importResult.skippedCount}</p>
               </div>
             </div>
 
-            <div className="pt-2">
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-3">
               <Link href={`/workspaces/${workspaceId}`}>
-                <Button size="sm" className="gap-2 text-xs">
+                <Button size="sm" className="gap-2 text-xs h-9 px-4">
                   <FileCheck className="w-4 h-4" />
-                  Buka Checklist Workspace
+                  Buka Form Workspace
                 </Button>
               </Link>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={resetImportFlow}
+                className="gap-2 text-xs h-9 px-4"
+              >
+                <Upload className="w-4 h-4" />
+                Import Berkas Lain
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -324,4 +1049,3 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
     </div>
   );
 }
-

@@ -18,8 +18,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Registration Checklist Management",
-  description: "Aplikasi Checklist Kelengkapan Registrasi Peserta",
+  title: "Registration Form Management",
+  description: "Aplikasi Form Kelengkapan Registrasi Peserta",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
-import { ChecklistTemplate } from "@/types/domain";
+import { FormTemplate } from "@/types/domain";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -41,7 +41,7 @@ export default function TemplatesPage() {
   const { user } = useAuthStore();
 
   const [search, setSearch] = useState("");
-  const [templateToDelete, setTemplateToDelete] = useState<ChecklistTemplate | null>(null);
+  const [templateToDelete, setTemplateToDelete] = useState<FormTemplate | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
   // Role guard: Only admin can access templates
@@ -58,9 +58,9 @@ export default function TemplatesPage() {
 
   // Duplicate mutation
   const duplicateMutation = useMutation({
-    mutationFn: async (source: ChecklistTemplate) => {
+    mutationFn: async (source: FormTemplate) => {
       const now = new Date().toISOString();
-      const duplicated: ChecklistTemplate = {
+      const duplicated: FormTemplate = {
         ...source,
         id: `tpl-${Date.now().toString(36)}`,
         name: `${source.name} (Salinan)`,
@@ -109,13 +109,13 @@ export default function TemplatesPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-5">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold tracking-tight">Template Checklist Global</h1>
+            <h1 className="text-2xl font-bold tracking-tight">Template Form Global</h1>
             <Badge variant="outline" className="text-xs">
               {templates.length} Template
             </Badge>
           </div>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Kelola template standar yang dapat disalin sebagai konfigurasi awal saat membuat workspace kegiatan baru.
+            Kelola template form standar yang dapat disalin sebagai konfigurasi awal saat membuat workspace kegiatan baru.
           </p>
         </div>
 
@@ -131,7 +131,7 @@ export default function TemplatesPage() {
       <div className="relative max-w-sm">
         <Search className="w-4 h-4 absolute left-3 top-2.5 text-muted-foreground" />
         <Input
-          placeholder="Cari nama template atau item checklist..."
+          placeholder="Cari nama template atau field form..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="pl-9 text-xs"
@@ -146,11 +146,11 @@ export default function TemplatesPage() {
       ) : filteredTemplates.length === 0 ? (
         <EmptyState
           icon={Layers}
-          title="Tidak ada template checklist"
+          title="Tidak ada template form"
           description={
             search
-              ? "Tidak ditemukan template checklist yang sesuai kata kunci pencarian Anda."
-              : "Belum ada template checklist yang terdaftar. Buat template pertama Anda sekarang."
+              ? "Tidak ditemukan template form yang sesuai kata kunci pencarian Anda."
+              : "Belum ada template form yang terdaftar. Buat template pertama Anda sekarang."
           }
           actionLabel={!search ? "Buat Template Baru" : undefined}
           onAction={!search ? () => router.push("/templates/new") : undefined}
@@ -243,7 +243,7 @@ export default function TemplatesPage() {
           <AlertDialogHeader>
             <AlertDialogTitle className="text-base flex items-center gap-2 text-destructive">
               <AlertCircle className="w-5 h-5" />
-              Hapus Template Checklist?
+              Hapus Template Form?
             </AlertDialogTitle>
             <AlertDialogDescription className="text-xs text-muted-foreground space-y-2">
               <p>
@@ -254,7 +254,7 @@ export default function TemplatesPage() {
                 . Tindakan ini tidak dapat dibatalkan.
               </p>
               <p className="bg-muted p-2 rounded text-[11px]">
-                <strong>Catatan:</strong> Workspace yang sudah dibuat menggunakan template ini tetap aman dan tidak akan terpengaruh karena checklist di workspace bersifat snapshot independen.
+                <strong>Catatan:</strong> Workspace yang sudah dibuat menggunakan template ini tetap aman dan tidak akan terpengaruh karena form di workspace bersifat snapshot independen.
               </p>
             </AlertDialogDescription>
           </AlertDialogHeader>

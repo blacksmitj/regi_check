@@ -1,0 +1,334 @@
+"use client";
+
+import { useState } from "react";
+import { FormField, FormFieldType } from "@/types/domain";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Trash2, Plus, Sparkles, Check } from "lucide-react";
+
+interface FormFieldEditorDrawerProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  field: FormField | null;
+  availableColumns: string[];
+  onSave: (field: FormField) => void;
+  onDelete?: (id: string) => void;
+}
+
+export function FormFieldEditorDrawer({
+  open,
+  onOpenChange,
+  field,
+  availableColumns,
+  onSave,
+  onDelete,
+}: FormFieldEditorDrawerProps) {
+  if (!field) return null;
+
+  return (
+    <DrawerInner
+      key={field.id}
+      open={open}
+      onOpenChange={onOpenChange}
+      initialField={field}
+      availableColumns={availableColumns}
+      onSave={onSave}
+      onDelete={onDelete}
+    />
+  );
+}
+
+function DrawerInner({
+  open,
+  onOpenChange,
+  initialField,
+  availableColumns,
+  onSave,
+  onDelete,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  initialField: FormField;
+  availableColumns: string[];
+  onSave: (field: FormField) => void;
+  onDelete?: (id: string) => void;
+}) {
+  const [formData, setFormData] = useState<FormField>({ ...initialField });
+  const [optionsText, setOptionsText] = useState<string>(
+    (initialField.options || []).join("\n")
+  );
+
+  const handleTypeChange = (type: FormFieldType) => {
+    setFormData((prev) => ({
+      ...prev,
+      type,
+      options:
+        type === "select" || type === "radio"
+          ? prev.options && prev.options.length > 0
+            ? prev.options
+            : ["Pilihan 1", "Pilihan 2"]
+          : undefined,
+    }));
+  };
+
+  const handleSave = () => {
+    const updated = { ...formData };
+    if (updated.type === "select" || updated.type === "radio") {
+      updated.options = optionsText
+        .split("\n")
+        .map((s) => s.trim())
+        .filter(Boolean);
+    } else {
+      updated.options = undefined;
+    }
+    onSave(updated);
+    onOpenChange(false);
+  };
+
+  const isExcelMapped = formData.sourceType === "excel_column";
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-full sm:max-w-md flex flex-col p-0 bg-background">
+        <SheetHeader className="p-5 pb-3 border-b border-border">
+          <div className="flex items-center gap-2">
+            <SheetTitle className="text-base font-semibold">Pengaturan Field Form</SheetTitle>
+            <Badge variant={isExcelMapped ? "secondary" : "default"} className="text-[10px] px-1.5 py-0">
+              {isExcelMapped ? "Kolom Excel" : "Field Admin"}
+            </Badge>
+          </div>
+          <SheetDescription className="text-xs">
+            Atur label, tipe input, validasi, dan perilaku petugas saat mengisi form peserta.
+          </SheetDescription>
+        </SheetHeader>
+
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          {/* Sumber Field */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold">Sumber Field</Label>
+            <Select
+              value={formData.sourceType === "excel_column" ? "excel_column" : "custom_field"}
+              onValueChange={(val) => {
+                if (!val) return;
+                const source = val as "custom_field" | "excel_column";
+                setFormData((prev) => ({
+                  ...prev,
+                  sourceType: source,
+                  excelColumn: source === "excel_column" ? prev.excelColumn || availableColumns[0] || "" : undefined,
+                }));
+              }}
+            >
+              <SelectTrigger className="w-full h-8 text-xs font-medium">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="custom_field">Field Tambahan Admin (Baru)</SelectItem>
+                <SelectItem value="excel_column">Kolom Bawaan Excel Peserta</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Kolom Excel Mapping */}
+          {formData.sourceType === "excel_column" && (
+            <div className="space-y-1.5 p-3 rounded-md bg-muted/40 border border-border">
+              <Label className="text-xs font-semibold">Petakan ke Kolom Excel</Label>
+              <Select
+                value={formData.excelColumn || ""}
+                onValueChange={(val) => {
+                  if (!val) return;
+                  setFormData((prev) => ({
+                    ...prev,
+                    excelColumn: val,
+                    label: prev.label === "Field Form Baru" || !prev.label ? val : prev.label,
+                  }));
+                }}
+              >
+                <SelectTrigger className="w-full h-8 text-xs font-medium">
+                  <SelectValue placeholder="Pilih header kolom..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableColumns.length > 0 ? (
+                    availableColumns.map((col) => (
+                      <SelectItem key={col} value={col}>
+                        {col}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="none" disabled>
+                      Tidak ada kolom Excel ditemukan
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">
+                Nilai awal input peserta akan diambil dari data kolom Excel ini.
+              </p>
+            </div>
+          )}
+
+          {/* Label Field */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold">Label Field di Form</Label>
+            <Input
+              value={formData.label}
+              onChange={(e) => setFormData((prev) => ({ ...prev, label: e.target.value }))}
+              placeholder="Contoh: Nama Lengkap / Konfirmasi Hadir"
+              className="text-xs h-8"
+            />
+          </div>
+
+          {/* Deskripsi / Petunjuk Pengisian */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold">Petunjuk Pengisian (Opsional)</Label>
+            <Textarea
+              value={formData.description || ""}
+              onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
+              placeholder="Contoh: Pastikan nomor HP aktif WhatsApp..."
+              rows={2}
+              className="text-xs"
+            />
+          </div>
+
+          {/* Tipe Input */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold">Tipe Input</Label>
+            <Select value={formData.type} onValueChange={(val) => handleTypeChange(val as FormFieldType)}>
+              <SelectTrigger className="w-full h-8 text-xs font-medium">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="checkbox">Checkbox (Centang / Ya-Tidak)</SelectItem>
+                <SelectItem value="text">Teks Pendek (Text)</SelectItem>
+                <SelectItem value="textarea">Teks Panjang (Textarea)</SelectItem>
+                <SelectItem value="number">Angka (Number)</SelectItem>
+                <SelectItem value="date">Tanggal (Date)</SelectItem>
+                <SelectItem value="select">Dropdown Pilihan (Select)</SelectItem>
+                <SelectItem value="radio">Radio Buttons (Pilihan Tunggal)</SelectItem>
+                <SelectItem value="email">Email</SelectItem>
+                <SelectItem value="phone">Nomor Telepon / WhatsApp</SelectItem>
+                <SelectItem value="image">Upload Foto (Image)</SelectItem>
+                <SelectItem value="file">Upload Berkas / PDF (File)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Options jika tipe select atau radio */}
+          {(formData.type === "select" || formData.type === "radio") && (
+            <div className="space-y-1.5 p-3 rounded-md bg-muted/40 border border-border">
+              <Label className="text-xs font-semibold">Daftar Pilihan Opsi (Satu baris per opsi)</Label>
+              <Textarea
+                value={optionsText}
+                onChange={(e) => setOptionsText(e.target.value)}
+                placeholder="Pilihan A&#10;Pilihan B&#10;Pilihan C"
+                rows={3}
+                className="text-xs"
+              />
+            </div>
+          )}
+
+          {/* Switch Opsi Form */}
+          <div className="space-y-3 pt-2 border-t border-border">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label className="text-xs font-medium">Wajib Diisi (Required)</Label>
+                <p className="text-[11px] text-muted-foreground">Form tidak lengkap bila field ini kosong</p>
+              </div>
+              <Switch
+                checked={formData.required}
+                onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, required: checked }))}
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label className="text-xs font-medium">Dapat Diedit Petugas (Editable)</Label>
+                <p className="text-[11px] text-muted-foreground">Petugas dapat mengubah nilai saat registrasi</p>
+              </div>
+              <Switch
+                checked={formData.editable}
+                onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, editable: checked }))}
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label className="text-xs font-medium">Wajibkan Foto Bukti (Evidence)</Label>
+                <p className="text-[11px] text-muted-foreground">Petugas wajib mengambil foto bukti saat verifikasi</p>
+              </div>
+              <Switch
+                checked={!!formData.evidenceEnabled}
+                onCheckedChange={(checked) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    evidenceEnabled: checked,
+                    evidenceRequired: checked ? prev.evidenceRequired : false,
+                  }))
+                }
+              />
+            </div>
+          </div>
+        </div>
+
+        <SheetFooter className="p-4 border-t border-border flex flex-row items-center justify-between gap-2">
+          {onDelete ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                onDelete(formData.id);
+                onOpenChange(false);
+              }}
+              className="text-destructive hover:text-destructive hover:bg-destructive/10 text-xs gap-1.5 h-8 px-2.5"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Hapus
+            </Button>
+          ) : (
+            <div />
+          )}
+
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => onOpenChange(false)}
+              className="text-xs h-8"
+            >
+              Batal
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleSave}
+              className="text-xs gap-1.5 h-8"
+            >
+              <Check className="w-3.5 h-3.5" />
+              Terapkan
+            </Button>
+          </div>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
+  );
+}

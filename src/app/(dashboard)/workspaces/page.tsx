@@ -38,8 +38,8 @@ export default function WorkspacesPage() {
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             {user?.role === "officer"
-              ? "Pilih kegiatan untuk langsung memulai pemeriksaan dan verifikasi berkas checklist peserta."
-              : "Kelola daftar kegiatan registrasi, peserta, dan checklist berkas."}
+              ? "Pilih kegiatan untuk langsung memulai pengisian dan pengecekan form peserta."
+              : "Kelola daftar kegiatan registrasi, peserta, dan form isian."}
           </p>
         </div>
 

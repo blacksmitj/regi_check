@@ -24,9 +24,9 @@ export function ExportWorkspaceClient({ workspaceId }: { workspaceId: string }) 
     queryFn: () => api.getParticipants(workspaceId),
   });
 
-  const { data: checklistItems = [] } = useQuery({
-    queryKey: ["workspaceChecklist", workspaceId],
-    queryFn: () => api.getWorkspaceChecklist(workspaceId),
+  const { data: formFields = [] } = useQuery({
+    queryKey: ["workspaceForm", workspaceId],
+    queryFn: () => api.getWorkspaceForm(workspaceId),
   });
 
   const filtered = participants.filter((p) => {
@@ -43,10 +43,12 @@ export function ExportWorkspaceClient({ workspaceId }: { workspaceId: string }) 
         Status: p.status === "complete" ? "Lengkap" : p.status === "rejected" ? "Ditolak" : "Belum Lengkap",
       };
 
-      checklistItems
+      formFields
         .filter((i) => i.active)
-        .forEach((item) => {
-          row[item.label] = p.status === "complete" ? "Ya" : "-";
+        .forEach((field) => {
+          const key = field.excelColumn || field.id;
+          const val = p.data[key] !== undefined ? p.data[key] : p.data[field.id] ?? p.data[field.label];
+          row[field.label] = val !== undefined && val !== null && val !== "" ? String(val) : "-";
         });
 
       return row;
@@ -83,7 +85,7 @@ export function ExportWorkspaceClient({ workspaceId }: { workspaceId: string }) 
         <CardHeader>
           <CardTitle className="text-base font-semibold">Pilih Kriteria Data Peserta</CardTitle>
           <CardDescription className="text-xs">
-            Sesuai PRD §10: Header kolom file Excel akan otomatis mengikuti konfigurasi checklist workspace.
+            Header kolom file Excel akan otomatis mengikuti konfigurasi form workspace.
           </CardDescription>
         </CardHeader>
 
@@ -112,11 +114,10 @@ export function ExportWorkspaceClient({ workspaceId }: { workspaceId: string }) 
                 <div
                   key={tab.id}
                   onClick={() => setFilterStatus(tab.id as typeof filterStatus)}
-                  className={`p-3 rounded-lg border text-center cursor-pointer transition-all ${
-                    filterStatus === tab.id
+                  className={`p-3 rounded-lg border text-center cursor-pointer transition-all ${filterStatus === tab.id
                       ? "border-primary bg-primary/10 ring-1 ring-primary"
                       : "border-border hover:bg-muted/40"
-                  }`}
+                    }`}
                 >
                   <p className="text-xs font-semibold text-foreground">{tab.label}</p>
                   <p className="text-sm font-bold text-muted-foreground mt-0.5">{tab.count} Orang</p>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
@@ -9,15 +9,28 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Loader2, Sparkles } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import Link from "next/link";
 
 export default function CreateWorkspacePage() {
   const router = useRouter();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
-  const [endDate, setEndDate] = useState(new Date(Date.now() + 86400000 * 3).toISOString().slice(0, 10));
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+
+  useEffect(() => {
+    const today = new Date();
+    setStartDate(today.toISOString().slice(0, 10));
+    setEndDate(new Date(today.getTime() + 86400000 * 3).toISOString().slice(0, 10));
+  }, []);
   const [templateId, setTemplateId] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,7 +81,7 @@ export default function CreateWorkspacePage() {
         <div>
           <h1 className="text-xl font-bold tracking-tight">Buat Workspace Kegiatan Baru</h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Admin dapat mengonfigurasi kegiatan dan memilih template checklist bawaan.
+            Admin dapat mengonfigurasi kegiatan dan memilih template form bawaan.
           </p>
         </div>
       </div>
@@ -78,7 +91,7 @@ export default function CreateWorkspacePage() {
           <CardHeader>
             <CardTitle className="text-base font-semibold">Informasi Kegiatan</CardTitle>
             <CardDescription className="text-xs">
-              Sesuai PRD: Checklist workspace akan disalin independen dari template yang dipilih.
+              Form workspace akan disalin independen dari template yang dipilih.
             </CardDescription>
           </CardHeader>
 
@@ -135,23 +148,26 @@ export default function CreateWorkspacePage() {
 
             <div className="space-y-1.5">
               <Label htmlFor="template" className="text-xs">
-                Template Checklist Bawaan (Opsional)
+                Template Form Bawaan (Opsional)
               </Label>
-              <select
-                id="template"
+              <Select
                 value={templateId}
-                onChange={(e) => setTemplateId(e.target.value)}
-                className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-xs shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                onValueChange={(val) => setTemplateId(val === "none" ? "" : (val ?? ""))}
               >
-                <option value="">-- Pilih Template Checklist --</option>
-                {templates.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name} ({t.items.length} item checklist)
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger id="template" className="w-full text-xs">
+                  <SelectValue placeholder="-- Pilih Template Form --" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">-- Tanpa Template (Bawaan) --</SelectItem>
+                  {templates.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.name} ({t.items.length} field form)
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <p className="text-[11px] text-muted-foreground">
-                Jika tidak memilih, template checklist pertama akan digunakan secara otomatis.
+                Jika tidak memilih, template form pertama akan digunakan secara otomatis.
               </p>
             </div>
 

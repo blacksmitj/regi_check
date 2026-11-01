@@ -2,6 +2,8 @@ import { mockDB } from "@/mocks/db";
 import {
   User,
   Workspace,
+  FormField,
+  FormTemplate,
   ChecklistItem,
   ChecklistTemplate,
   Participant,
@@ -83,15 +85,29 @@ export const api = {
     mockDB.deleteWorkspace(id);
   },
 
-  // --- Checklist items per Workspace ---
-  async getWorkspaceChecklist(workspaceId: string): Promise<ChecklistItem[]> {
+  async cleanWorkspaceResponses(id: string): Promise<void> {
     await delay();
-    return mockDB.getWorkspaceChecklist(workspaceId);
+    mockDB.cleanWorkspaceResponses(id);
+  },
+
+  // --- Form fields per Workspace ---
+  async getWorkspaceForm(workspaceId: string): Promise<FormField[]> {
+    await delay();
+    return mockDB.getWorkspaceForm(workspaceId);
+  },
+
+  async saveWorkspaceForm(workspaceId: string, items: FormField[]): Promise<FormField[]> {
+    await delay();
+    return mockDB.saveWorkspaceForm(workspaceId, items);
+  },
+
+  // Legacy alias
+  async getWorkspaceChecklist(workspaceId: string): Promise<ChecklistItem[]> {
+    return this.getWorkspaceForm(workspaceId);
   },
 
   async saveWorkspaceChecklist(workspaceId: string, items: ChecklistItem[]): Promise<ChecklistItem[]> {
-    await delay();
-    return mockDB.saveWorkspaceChecklist(workspaceId, items);
+    return this.saveWorkspaceForm(workspaceId, items);
   },
 
   // --- Templates ---
@@ -132,25 +148,65 @@ export const api = {
 
   async updateParticipant(id: string, updates: Partial<Participant>): Promise<Participant> {
     await delay();
+    const p = mockDB.getParticipant(id);
+    if (!p) throw new Error("Peserta tidak ditemukan");
+
+    // If data updated, recompute completion status automatically
+    if (updates.data && !updates.status) {
+      const formFields = mockDB.getWorkspaceForm(p.workspaceId);
+      updates.status = calculateParticipantStatus(formFields, updates.data);
+    }
+
     return mockDB.updateParticipant(id, updates);
+  },
+
+  async updateParticipantFormData(
+    participantId: string,
+    fieldKey: string,
+    value: unknown
+  ): Promise<Participant> {
+    await delay();
+    const p = mockDB.getParticipant(participantId);
+    if (!p) throw new Error("Peserta tidak ditemukan");
+    const updatedData = { ...p.data, [fieldKey]: value };
+    const formFields = mockDB.getWorkspaceForm(p.workspaceId);
+    const newStatus = calculateParticipantStatus(formFields, updatedData);
+    return mockDB.updateParticipant(participantId, {
+      data: updatedData,
+      status: newStatus,
+    });
   },
 
   async importParticipants(
     workspaceId: string,
-    participants: Array<Omit<Participant, "id" | "workspaceId" | "status" | "createdAt" | "updatedAt">>
-  ): Promise<{ importedCount: number }> {
-    await delay(300);
-    const now = new Date().toISOString();
-    const newItems: Participant[] = participants.map((p, idx) => ({
-      ...p,
-      id: `part-${Date.now().toString(36)}-${idx}`,
-      workspaceId,
-      status: "incomplete",
-      createdAt: now,
-      updatedAt: now,
+    participants: Array<{
+      data: Record<string, unknown>;
+      action?: "create" | "overwrite" | "skip";
+      existingId?: string;
+    }>
+  ): Promise<{
+    total: number;
+    importedCount: number;
+    createdCount: number;
+    updatedCount: number;
+    skippedCount: number;
+  }> {
+    await delay(350);
+
+    const formatted = participants.map((p) => ({
+      action: p.action || "create",
+      data: p.data,
+      existingId: p.existingId,
     }));
-    mockDB.addParticipants(newItems);
-    return { importedCount: newItems.length };
+
+    const result = mockDB.importParticipantsWithDeduplication(workspaceId, formatted);
+    return {
+      total: participants.length,
+      importedCount: result.createdCount + result.updatedCount,
+      createdCount: result.createdCount,
+      updatedCount: result.updatedCount,
+      skippedCount: result.skippedCount,
+    };
   },
 
   // --- Checklist Responses ---

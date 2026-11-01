@@ -61,7 +61,7 @@ export default function ProfilePage() {
           <div className="space-y-2 pt-2">
             <h4 className="text-xs font-semibold">Pengaturan Data Mocking</h4>
             <p className="text-[11px] text-muted-foreground">
-              Jika Anda ingin mengembalikan kondisi data (peserta, checklist responses, dan workspace) ke kondisi awal sebelum pengujian:
+              Jika Anda ingin mengembalikan kondisi data (peserta, isian form, dan workspace) ke kondisi awal sebelum pengujian:
             </p>
             <Button
               variant="outline"

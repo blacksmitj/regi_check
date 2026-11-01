@@ -1,11 +1,13 @@
 import {
   User,
   Workspace,
+  FormTemplate,
   ChecklistTemplate,
   Participant,
   Officer,
   AuditLog,
   ChecklistResponse,
+  FormField,
   ChecklistItem,
 } from "@/types/domain";
 import {
@@ -18,13 +20,13 @@ import {
   SEED_AUDIT_LOGS,
 } from "./seed";
 
-const DB_KEY = "regicheck_mock_db_v1";
+const DB_KEY = "regicheck_mock_db_v2";
 
 interface MockDBData {
   users: User[];
   workspaces: Workspace[];
-  templates: ChecklistTemplate[];
-  workspaceChecklists: Record<string, ChecklistItem[]>; // workspaceId -> ChecklistItem[]
+  templates: FormTemplate[];
+  workspaceChecklists: Record<string, FormField[]>; // workspaceId -> FormField[]
   officers: Officer[];
   participants: Participant[];
   responses: ChecklistResponse[];
@@ -165,9 +167,58 @@ class MockDatabase {
   }
 
   public deleteWorkspace(id: string): void {
-    this.data.workspaces = this.data.workspaces.filter((w) => w.id !== id);
-    delete this.data.workspaceChecklists[id];
+    const ws = this.data.workspaces.find((w) => w.id === id);
+    const participantIds = this.data.participants
+      .filter((p) => p.workspaceId === id)
+      .map((p) => p.id);
+
+    // Remove responses of participants in this workspace
+    this.data.responses = this.data.responses.filter(
+      (r) => !participantIds.includes(r.participantId)
+    );
+    // Remove participants
     this.data.participants = this.data.participants.filter((p) => p.workspaceId !== id);
+    // Remove workspace checklist items
+    delete this.data.workspaceChecklists[id];
+    // Remove workspace
+    this.data.workspaces = this.data.workspaces.filter((w) => w.id !== id);
+
+    this.addAuditLog({
+      action: "DELETE_WORKSPACE",
+      officerEmail: this.getCurrentUser()?.email || "admin@regicheck.id",
+      officerName: this.getCurrentUser()?.name || "Admin",
+      workspaceId: id,
+      newValue: `Menghapus permanen workspace "${ws?.name || id}" dan seluruh data terkait`,
+    });
+
+    this.save();
+  }
+
+  public cleanWorkspaceResponses(id: string): void {
+    const ws = this.data.workspaces.find((w) => w.id === id);
+    const wsParticipants = this.data.participants.filter((p) => p.workspaceId === id);
+    const participantIds = wsParticipants.map((p) => p.id);
+
+    // Remove responses of participants in this workspace
+    this.data.responses = this.data.responses.filter(
+      (r) => !participantIds.includes(r.participantId)
+    );
+
+    // Reset status of each participant to incomplete
+    const now = new Date().toISOString();
+    wsParticipants.forEach((p) => {
+      p.status = "incomplete";
+      p.updatedAt = now;
+    });
+
+    this.addAuditLog({
+      action: "CLEAN_WORKSPACE_DATA",
+      officerEmail: this.getCurrentUser()?.email || "admin@regicheck.id",
+      officerName: this.getCurrentUser()?.name || "Admin",
+      workspaceId: id,
+      newValue: `Membersihkan data checklist respon dan mereset status verifikasi untuk ${wsParticipants.length} peserta di "${ws?.name || id}"`,
+    });
+
     this.save();
   }
 
@@ -196,14 +247,22 @@ class MockDatabase {
     this.save();
   }
 
-  public getWorkspaceChecklist(workspaceId: string): ChecklistItem[] {
+  public getWorkspaceForm(workspaceId: string): FormField[] {
     return this.data.workspaceChecklists[workspaceId] || [];
   }
 
-  public saveWorkspaceChecklist(workspaceId: string, items: ChecklistItem[]): ChecklistItem[] {
+  public saveWorkspaceForm(workspaceId: string, items: FormField[]): FormField[] {
     this.data.workspaceChecklists[workspaceId] = items;
     this.save();
     return items;
+  }
+
+  public getWorkspaceChecklist(workspaceId: string): ChecklistItem[] {
+    return this.getWorkspaceForm(workspaceId);
+  }
+
+  public saveWorkspaceChecklist(workspaceId: string, items: ChecklistItem[]): ChecklistItem[] {
+    return this.saveWorkspaceForm(workspaceId, items);
   }
 
   // --- Participants ---
@@ -226,6 +285,60 @@ class MockDatabase {
   public addParticipants(participants: Participant[]): void {
     this.data.participants.push(...participants);
     this.save();
+  }
+
+  public importParticipantsWithDeduplication(
+    workspaceId: string,
+    items: Array<{
+      action: "create" | "overwrite" | "skip";
+      data: Record<string, unknown>;
+      existingId?: string;
+    }>
+  ): { createdCount: number; updatedCount: number; skippedCount: number } {
+    const now = new Date().toISOString();
+    let createdCount = 0;
+    let updatedCount = 0;
+    let skippedCount = 0;
+
+    const toAdd: Participant[] = [];
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.action === "skip") {
+        skippedCount++;
+        continue;
+      }
+
+      if (item.action === "overwrite" && item.existingId) {
+        const existing = this.data.participants.find(
+          (p) => p.id === item.existingId && p.workspaceId === workspaceId
+        );
+        if (existing) {
+          existing.data = { ...existing.data, ...item.data };
+          existing.updatedAt = now;
+          updatedCount++;
+          continue;
+        }
+      }
+
+      // Default to create
+      toAdd.push({
+        id: `part-${Date.now().toString(36)}-${i}-${Math.random().toString(36).slice(2, 6)}`,
+        workspaceId,
+        data: item.data,
+        status: "incomplete",
+        createdAt: now,
+        updatedAt: now,
+      });
+      createdCount++;
+    }
+
+    if (toAdd.length > 0) {
+      this.data.participants.push(...toAdd);
+    }
+
+    this.save();
+    return { createdCount, updatedCount, skippedCount };
   }
 
   // --- Checklist Responses ---

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
-import { ChecklistItem, ChecklistTemplate } from "@/types/domain";
+import { FormField, FormTemplate } from "@/types/domain";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -35,7 +35,7 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { SortableChecklistItem } from "@/features/checklist/components/sortable-checklist-item";
+import { SortableFormFieldItem } from "@/features/form/components/sortable-form-field-item";
 import { useAuthStore } from "@/stores/auth-store";
 
 interface TemplateEditorProps {
@@ -64,7 +64,9 @@ export function TemplateEditor({ templateId }: TemplateEditorProps) {
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [items, setItems] = useState<ChecklistItem[]>([]);
+  const [sampleColumns, setSampleColumns] = useState<string[]>([]);
+  const [newColumnInput, setNewColumnInput] = useState("");
+  const [items, setItems] = useState<FormField[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isSavedNotice, setIsSavedNotice] = useState(false);
 
@@ -72,30 +74,68 @@ export function TemplateEditor({ templateId }: TemplateEditorProps) {
     if (initialTemplate) {
       setName(initialTemplate.name);
       setDescription(initialTemplate.description || "");
+      setSampleColumns(initialTemplate.sampleColumns || []);
       setItems(initialTemplate.items || []);
     } else if (!isEditing && items.length === 0) {
       // Provide default starting items for new template
+      setSampleColumns([
+        "Foto Profil",
+        "NIK",
+        "Nama Lengkap",
+        "Nomor HP",
+        "Email",
+        "Nominal Pembayaran",
+      ]);
       setItems([
         {
           id: `item-${Date.now().toString(36)}-1`,
-          label: "Kartu Tanda Penduduk (KTP / Identitas)",
-          type: "checkbox",
-          required: true,
-          editable: false,
-          evidenceEnabled: true,
-          evidenceRequired: true,
+          label: "Foto Profil Peserta",
+          type: "image",
+          sourceType: "excel_column",
+          excelColumn: "Foto Profil",
+          required: false,
+          editable: true,
+          evidenceEnabled: false,
+          evidenceRequired: false,
           order: 1,
           active: true,
         },
         {
           id: `item-${Date.now().toString(36)}-2`,
-          label: "Konfirmasi Kehadiran Fisik",
-          type: "checkbox",
+          label: "NIK Peserta",
+          type: "text",
+          sourceType: "excel_column",
+          excelColumn: "NIK",
           required: true,
-          editable: false,
+          editable: true,
           evidenceEnabled: false,
           evidenceRequired: false,
           order: 2,
+          active: true,
+        },
+        {
+          id: `item-${Date.now().toString(36)}-3`,
+          label: "Nama Lengkap",
+          type: "text",
+          sourceType: "excel_column",
+          excelColumn: "Nama Lengkap",
+          required: true,
+          editable: true,
+          evidenceEnabled: false,
+          evidenceRequired: false,
+          order: 3,
+          active: true,
+        },
+        {
+          id: `item-${Date.now().toString(36)}-4`,
+          label: "Pemeriksaan KTP Fisik",
+          type: "checkbox",
+          sourceType: "checklist_input",
+          required: true,
+          editable: true,
+          evidenceEnabled: true,
+          evidenceRequired: true,
+          order: 4,
           active: true,
         },
       ]);
@@ -119,16 +159,17 @@ export function TemplateEditor({ templateId }: TemplateEditorProps) {
         throw new Error("Nama template wajib diisi.");
       }
       if (items.length === 0) {
-        throw new Error("Template harus memiliki minimal 1 item checklist.");
+        throw new Error("Template harus memiliki minimal 1 field form.");
       }
 
       const id = templateId || `tpl-${Date.now().toString(36)}`;
       const now = new Date().toISOString();
 
-      const payload: ChecklistTemplate = {
+      const payload: FormTemplate = {
         id,
         name: name.trim(),
         description: description.trim(),
+        sampleColumns,
         items: items.map((it, idx) => ({ ...it, order: idx + 1 })),
         createdAt: initialTemplate ? initialTemplate.createdAt : now,
         updatedAt: now,
@@ -165,11 +206,15 @@ export function TemplateEditor({ templateId }: TemplateEditorProps) {
     }
   };
 
-  const handleAddItem = () => {
-    const newItem: ChecklistItem = {
-      id: `item-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-      label: "Item Persyaratan Baru",
-      type: "checkbox",
+  const handleAddItem = (
+    source: "custom_field" | "excel_column" | "checklist_input" = "custom_field"
+  ) => {
+    const newItem: FormField = {
+      id: `field-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+      label: source === "excel_column" ? "Kolom Profil Peserta" : "Field Form Baru",
+      type: source === "excel_column" ? "text" : "text",
+      sourceType: source === "excel_column" ? "excel_column" : "custom_field",
+      excelColumn: source === "excel_column" && sampleColumns.length > 0 ? sampleColumns[0] : undefined,
       required: true,
       editable: true,
       evidenceEnabled: false,
@@ -180,7 +225,7 @@ export function TemplateEditor({ templateId }: TemplateEditorProps) {
     setItems([...items, newItem]);
   };
 
-  const handleUpdateItem = (id: string, updates: Partial<ChecklistItem>) => {
+  const handleUpdateItem = (id: string, updates: Partial<FormField>) => {
     setItems(items.map((it) => (it.id === id ? { ...it, ...updates } : it)));
   };
 
@@ -209,11 +254,11 @@ export function TemplateEditor({ templateId }: TemplateEditorProps) {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-bold tracking-tight">
-                {isEditing ? "Edit Template Checklist" : "Buat Template Checklist Baru"}
+                {isEditing ? "Edit Template Form" : "Buat Template Form Baru"}
               </h1>
             </div>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Kelola cetak biru checklist standar yang dapat digunakan pada berbagai workspace kegiatan.
+              Kelola cetak biru form standar yang dapat digunakan pada berbagai workspace kegiatan.
             </p>
           </div>
         </div>
@@ -260,10 +305,10 @@ export function TemplateEditor({ templateId }: TemplateEditorProps) {
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
             <Layers className="w-4 h-4 text-primary" />
-            Informasi Template
+            Informasi Template Form
           </CardTitle>
           <CardDescription className="text-xs">
-            Beri nama dan deskripsi yang jelas agar mudah dipilih saat pembuatan workspace baru.
+            Beri nama dan tentukan kolom-kolom Excel yang ingin dimapping menjadi tampilan foto, profil, atau field isian form.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -273,7 +318,7 @@ export function TemplateEditor({ templateId }: TemplateEditorProps) {
             </Label>
             <Input
               id="tpl-name"
-              placeholder="Contoh: Checklist Standar Registrasi Seminar / Workshop"
+              placeholder="Contoh: Formulir Pendaftaran & Data Peserta"
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="text-xs"
@@ -285,36 +330,113 @@ export function TemplateEditor({ templateId }: TemplateEditorProps) {
             </Label>
             <Textarea
               id="tpl-desc"
-              placeholder="Jelaskan peruntukan template ini, misal untuk verifikasi berkas teknis, identitas, atau kit peserta..."
+              placeholder="Jelaskan peruntukan template ini..."
               rows={2}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="text-xs"
             />
           </div>
+
+          {/* Kolom Contoh Excel untuk Mapping */}
+          <div className="pt-2 border-t border-border/60 space-y-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label className="text-xs font-semibold">Daftar Kolom Excel yang Tersedia</Label>
+                <p className="text-[11px] text-muted-foreground">
+                  Nama header kolom dari Excel (misal: Foto, NIK, Nama, Omset). Memudahkan mapping ke field di bawah.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-1.5 items-center">
+              {sampleColumns.map((col) => (
+                <span
+                  key={col}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-secondary text-secondary-foreground text-xs font-medium"
+                >
+                  {col}
+                  <button
+                    type="button"
+                    onClick={() => setSampleColumns(sampleColumns.filter((c) => c !== col))}
+                    className="text-muted-foreground hover:text-destructive"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+
+              <div className="flex items-center gap-1.5 mt-1 sm:mt-0">
+                <Input
+                  placeholder="Tambah nama kolom..."
+                  value={newColumnInput}
+                  onChange={(e) => setNewColumnInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && newColumnInput.trim()) {
+                      e.preventDefault();
+                      if (!sampleColumns.includes(newColumnInput.trim())) {
+                        setSampleColumns([...sampleColumns, newColumnInput.trim()]);
+                      }
+                      setNewColumnInput("");
+                    }
+                  }}
+                  className="text-xs h-7 w-44"
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="h-7 text-xs px-2"
+                  onClick={() => {
+                    if (newColumnInput.trim() && !sampleColumns.includes(newColumnInput.trim())) {
+                      setSampleColumns([...sampleColumns, newColumnInput.trim()]);
+                      setNewColumnInput("");
+                    }
+                  }}
+                >
+                  Tambah
+                </Button>
+              </div>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
-      {/* Checklist Items Builder */}
+      {/* Form Fields Builder */}
       <div className="space-y-3">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
-            <h2 className="text-sm font-bold tracking-tight">Daftar Item Persyaratan Checklist</h2>
+            <h2 className="text-sm font-bold tracking-tight">Daftar Field Form</h2>
             <p className="text-xs text-muted-foreground">
-              Total {items.length} item checklist terdaftar.
+              Total {items.length} field terdaftar (kombinasi mapping Excel dan field tambahan admin).
             </p>
           </div>
-          <Button size="sm" variant="outline" onClick={handleAddItem} className="gap-1.5 text-xs">
-            <Plus className="w-3.5 h-3.5" />
-            Tambah Item
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => handleAddItem("excel_column")}
+              className="gap-1.5 text-xs border-primary/40 text-primary hover:bg-primary/5"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              + Kolom Excel
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => handleAddItem("custom_field")}
+              className="gap-1.5 text-xs"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              + Field Form Baru
+            </Button>
+          </div>
         </div>
 
-        <div className="bg-amber-500/10 border border-amber-500/20 p-3 rounded-lg flex items-start gap-2.5 text-xs text-amber-700 dark:text-amber-300">
-          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+        <div className="bg-primary/5 border border-primary/20 p-3 rounded-lg flex items-start gap-2.5 text-xs text-foreground">
+          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-primary" />
           <div>
             <span className="font-semibold">Drag and Drop: </span>
-            Gunakan grip (titik enam) untuk mengatur urutan prioritas verifikasi. Urutan ini akan disalin otomatis saat template dipilih di workspace baru.
+            Gunakan grip untuk mengatur urutan tampilan field di formulir data peserta.
           </div>
         </div>
 
@@ -322,10 +444,11 @@ export function TemplateEditor({ templateId }: TemplateEditorProps) {
           <SortableContext items={items.map((it) => it.id)} strategy={verticalListSortingStrategy}>
             <div className="space-y-3">
               {items.map((item, idx) => (
-                <SortableChecklistItem
+                <SortableFormFieldItem
                   key={item.id}
                   item={item}
                   index={idx}
+                  availableColumns={sampleColumns}
                   onUpdate={handleUpdateItem}
                   onDelete={handleDeleteItem}
                 />
@@ -334,14 +457,24 @@ export function TemplateEditor({ templateId }: TemplateEditorProps) {
           </SortableContext>
         </DndContext>
 
-        <Button
-          variant="outline"
-          onClick={handleAddItem}
-          className="w-full py-4 border-dashed border-2 text-xs gap-2"
-        >
-          <Plus className="w-4 h-4" />
-          Tambah Item Checklist Baru
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => handleAddItem("excel_column")}
+            className="flex-1 py-4 border-dashed border-2 text-xs gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            Tambah Kolom Mapping Excel
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => handleAddItem("custom_field")}
+            className="flex-1 py-4 border-dashed border-2 text-xs gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            Tambah Field Form Baru
+          </Button>
+        </div>
       </div>
     </div>
   );

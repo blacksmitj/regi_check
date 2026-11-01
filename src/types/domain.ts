@@ -20,7 +20,7 @@ export interface Workspace {
   updatedAt: string;
 }
 
-export type ChecklistFieldType =
+export type FormFieldType =
   | "checkbox"
   | "text"
   | "textarea"
@@ -29,17 +29,25 @@ export type ChecklistFieldType =
   | "select"
   | "radio"
   | "email"
-  | "phone";
+  | "phone"
+  | "image"
+  | "file";
 
-export interface ChecklistItem {
+export type ChecklistFieldType = FormFieldType;
+
+export type FieldSourceType = "custom_field" | "excel_column" | "checklist_input";
+
+export interface FormField {
   id: string;
   label: string;
   description?: string;
-  type: ChecklistFieldType;
+  type: FormFieldType;
+  sourceType?: FieldSourceType; // whether mapped to participant excel data or custom form field
+  excelColumn?: string; // column header name in participant.data, e.g. "Foto", "NIK"
   required: boolean;
-  editable: boolean;
-  evidenceEnabled: boolean;
-  evidenceRequired: boolean;
+  editable: boolean; // if true, officer can edit this value directly in form entry panel
+  evidenceEnabled?: boolean;
+  evidenceRequired?: boolean;
   validation?: {
     regex?: string;
     minLength?: number;
@@ -50,14 +58,19 @@ export interface ChecklistItem {
   active: boolean;
 }
 
-export interface ChecklistTemplate {
+export type ChecklistItem = FormField;
+
+export interface FormTemplate {
   id: string;
   name: string;
   description?: string;
-  items: ChecklistItem[];
+  sampleColumns?: string[]; // list of excel column headers for mapping suggestions
+  items: FormField[];
   createdAt: string;
   updatedAt: string;
 }
+
+export type ChecklistTemplate = FormTemplate;
 
 export type ParticipantStatus = "complete" | "incomplete" | "rejected";
 export type ChecklistItemStatus = "complete" | "incomplete" | "rejected";
@@ -69,6 +82,15 @@ export interface EvidenceFile {
   type: string;
   localId?: string; // id in IndexedDB
   url?: string; // preview URL / object storage URL
+}
+
+export interface FormResponse {
+  id: string;
+  participantId: string;
+  fieldId: string;
+  value: unknown;
+  updatedBy?: string;
+  updatedAt?: string;
 }
 
 export interface ChecklistResponse {

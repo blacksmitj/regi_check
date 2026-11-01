@@ -28,9 +28,9 @@ export default function AuditLogsPage() {
   return (
     <div className="flex-1 p-6 max-w-6xl mx-auto w-full space-y-6">
       <div className="border-b border-border pb-5">
-        <h1 className="text-2xl font-bold tracking-tight">Audit Log Aktivitas Pemeriksaan</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Audit Log Aktivitas Form & Data</h1>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Riwayat pencatatan aktivitas pengisian checklist, penolakan, dan verifikasi dokumen oleh petugas.
+          Riwayat pencatatan aktivitas pengisian dan perubahan data form oleh petugas.
         </p>
       </div>
 
@@ -63,7 +63,7 @@ export default function AuditLogsPage() {
                 <th className="p-3">Waktu</th>
                 <th className="p-3">Petugas</th>
                 <th className="p-3">Peserta</th>
-                <th className="p-3">Item Checklist</th>
+                <th className="p-3">Field Form</th>
                 <th className="p-3">Aktivitas & Perubahan</th>
               </tr>
             </thead>

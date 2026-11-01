@@ -7,6 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Search, ChevronLeft, ChevronRight, User } from "lucide-react";
+import {
+  isGoogleDriveUrl,
+  getGoogleDriveThumbnailUrl,
+} from "@/lib/domain/drive-detector";
 
 interface ParticipantSidebarProps {
   participants: Participant[];
@@ -68,41 +72,37 @@ export function ParticipantSidebar({
         <div className="grid grid-cols-4 gap-1 text-[11px]">
           <button
             onClick={() => setFilterStatus("all")}
-            className={`py-1 rounded text-center font-medium transition-colors ${
-              filterStatus === "all"
+            className={`py-1 rounded text-center font-medium transition-colors ${filterStatus === "all"
                 ? "bg-primary text-primary-foreground font-semibold"
                 : "bg-muted/60 text-muted-foreground hover:bg-muted"
-            }`}
+              }`}
           >
             Semua ({counts.all})
           </button>
           <button
             onClick={() => setFilterStatus("incomplete")}
-            className={`py-1 rounded text-center font-medium transition-colors ${
-              filterStatus === "incomplete"
+            className={`py-1 rounded text-center font-medium transition-colors ${filterStatus === "incomplete"
                 ? "bg-amber-500 text-white font-semibold"
                 : "bg-muted/60 text-muted-foreground hover:bg-muted"
-            }`}
+              }`}
           >
             Belum ({counts.incomplete})
           </button>
           <button
             onClick={() => setFilterStatus("complete")}
-            className={`py-1 rounded text-center font-medium transition-colors ${
-              filterStatus === "complete"
+            className={`py-1 rounded text-center font-medium transition-colors ${filterStatus === "complete"
                 ? "bg-emerald-600 text-white font-semibold"
                 : "bg-muted/60 text-muted-foreground hover:bg-muted"
-            }`}
+              }`}
           >
             Lengkap ({counts.complete})
           </button>
           <button
             onClick={() => setFilterStatus("rejected")}
-            className={`py-1 rounded text-center font-medium transition-colors ${
-              filterStatus === "rejected"
+            className={`py-1 rounded text-center font-medium transition-colors ${filterStatus === "rejected"
                 ? "bg-rose-600 text-white font-semibold"
                 : "bg-muted/60 text-muted-foreground hover:bg-muted"
-            }`}
+              }`}
           >
             Ditolak ({counts.rejected})
           </button>
@@ -147,6 +147,14 @@ export function ParticipantSidebar({
             const isSelected = p.id === selectedId;
             const name = String(p.data["Nama Lengkap"] || p.data["Nama"] || "Peserta Tanpa Nama");
             const nik = String(p.data["NIK"] || "");
+            // Look for any photo in participant data
+            const photoKey = Object.keys(p.data).find((k) => /foto|photo|avatar|gambar/i.test(k));
+            const rawPhotoVal = photoKey ? String(p.data[photoKey] || "") : "";
+            const photoVal = rawPhotoVal
+              ? isGoogleDriveUrl(rawPhotoVal)
+                ? getGoogleDriveThumbnailUrl(rawPhotoVal, 100)
+                : rawPhotoVal
+              : "";
             // Mask NIK for security (§15.1)
             const maskedNik = nik.length > 8 ? `${nik.slice(0, 4)}********${nik.slice(-4)}` : nik;
 
@@ -154,24 +162,36 @@ export function ParticipantSidebar({
               <div
                 key={p.id}
                 onClick={() => onSelect(p.id)}
-                className={`p-3 text-left cursor-pointer transition-colors ${
-                  isSelected
+                className={`p-3 text-left cursor-pointer transition-colors ${isSelected
                     ? "bg-primary/10 border-l-4 border-l-primary"
                     : "hover:bg-muted/40"
-                }`}
+                  }`}
               >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <p className={`text-xs font-semibold truncate ${isSelected ? "text-primary" : "text-foreground"}`}>
-                      {name}
-                    </p>
-                    {maskedNik && (
-                      <p className="text-[11px] text-muted-foreground font-mono mt-0.5">
-                        NIK: {maskedNik}
-                      </p>
+                <div className="flex items-center justify-between gap-2.5">
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    {photoVal ? (
+                      <img
+                        src={photoVal}
+                        alt={name}
+                        className="w-9 h-9 rounded-full object-cover shrink-0 border border-border"
+                      />
+                    ) : (
+                      <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-muted-foreground shrink-0 border border-border">
+                        <User className="w-4 h-4" />
+                      </div>
                     )}
+                    <div className="min-w-0 flex-1">
+                      <p className={`text-xs font-semibold truncate ${isSelected ? "text-primary" : "text-foreground"}`}>
+                        {name}
+                      </p>
+                      {maskedNik && (
+                        <p className="text-[11px] text-muted-foreground font-mono mt-0.5">
+                          NIK: {maskedNik}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                  <StatusBadge status={p.status} className="text-[10px] py-0 px-1.5" />
+                  <StatusBadge status={p.status} className="text-[10px] py-0 px-1.5 shrink-0" />
                 </div>
               </div>
             );
