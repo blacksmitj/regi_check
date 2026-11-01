@@ -19,7 +19,6 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useState, Suspense } from "react";
-import { DevRoleSwitcher } from "./dev-role-switcher";
 
 interface NavItem {
   label: string;
@@ -179,8 +178,6 @@ function AppHeaderInner() {
 
         {/* Right: User Profile & Actions */}
         <div className="flex items-center gap-3">
-          <DevRoleSwitcher />
-
           {user ? (
             <div className="flex items-center gap-2.5">
               <Avatar className="w-8 h-8 border border-border">

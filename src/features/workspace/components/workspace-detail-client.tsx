@@ -17,6 +17,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { WorkspaceConfirmationDialog } from "./workspace-confirmation-dialog";
+import { WorkspaceShareDialog } from "./workspace-share-dialog";
 import Link from "next/link";
 import {
   FileSpreadsheet,
@@ -30,9 +31,11 @@ import {
   MoreVertical,
   RotateCcw,
   Trash2,
+  Share2,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
 import { EmptyState } from "@/components/shared/empty-state";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export function WorkspaceDetailClient({ workspaceId }: { workspaceId: string }) {
   const router = useRouter();
@@ -46,6 +49,7 @@ export function WorkspaceDetailClient({ workspaceId }: { workspaceId: string }) 
     open: false,
     type: "clean_data",
   });
+  const [shareModalOpen, setShareModalOpen] = useState(false);
 
   const [selectedParticipantId, setSelectedParticipantId] = useState<string | null>(null);
   const [mobileShowChecklist, setMobileShowChecklist] = useState(false);
@@ -105,8 +109,82 @@ export function WorkspaceDetailClient({ workspaceId }: { workspaceId: string }) 
 
   if (loadingWs || loadingParticipants) {
     return (
-      <div className="flex-1 flex items-center justify-center p-12 text-xs text-muted-foreground">
-        Memuat data workspace & peserta...
+      <div className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden">
+        {/* Workspace Operational Header Skeleton */}
+        <div className="px-4 py-2.5 border-b border-border bg-card/80 flex flex-wrap items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-3">
+            <Skeleton className="h-8 w-8 rounded-md" />
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <Skeleton className="h-5 w-40" />
+                <Skeleton className="h-4 w-12 rounded-full" />
+              </div>
+              <div className="flex items-center gap-2">
+                <Skeleton className="h-3 w-32" />
+                <Skeleton className="h-3 w-16" />
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-8 w-28 rounded-md" />
+            <Skeleton className="h-8 w-24 rounded-md" />
+            <Skeleton className="h-8 w-32 rounded-md" />
+            <Skeleton className="h-8 w-20 rounded-md" />
+          </div>
+        </div>
+
+        {/* Main Split Layout Skeleton */}
+        <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden">
+          {/* Left Sidebar Skeleton (Participants) */}
+          <div className="w-full md:w-80 lg:w-96 border-r border-border flex flex-col shrink-0 p-3 gap-3 bg-muted/10">
+            <div className="flex items-center justify-between gap-2">
+              <Skeleton className="h-9 flex-1 rounded-md" />
+              <Skeleton className="h-9 w-9 rounded-md" />
+            </div>
+            <div className="flex gap-2">
+              <Skeleton className="h-7 w-20 rounded-full" />
+              <Skeleton className="h-7 w-20 rounded-full" />
+              <Skeleton className="h-7 w-20 rounded-full" />
+            </div>
+            <div className="space-y-2.5 mt-2 flex-1 overflow-hidden">
+              {Array.from({ length: 7 }).map((_, idx) => (
+                <div key={idx} className="p-3 border rounded-lg space-y-2">
+                  <div className="flex justify-between items-center">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-4 w-14 rounded-full" />
+                  </div>
+                  <Skeleton className="h-3 w-24" />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Right Panel Skeleton (Form & Checklist) */}
+          <div className="flex-1 p-6 space-y-6 overflow-y-auto bg-background">
+            <div className="space-y-2 border-b pb-4">
+              <Skeleton className="h-6 w-48" />
+              <Skeleton className="h-4 w-72" />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-4 border rounded-lg space-y-3">
+                <Skeleton className="h-4 w-28" />
+                <Skeleton className="h-9 w-full" />
+                <Skeleton className="h-9 w-full" />
+              </div>
+              <div className="p-4 border rounded-lg space-y-3">
+                <Skeleton className="h-4 w-28" />
+                <Skeleton className="h-9 w-full" />
+                <Skeleton className="h-9 w-full" />
+              </div>
+            </div>
+            <div className="space-y-3 border rounded-lg p-4">
+              <Skeleton className="h-5 w-36" />
+              <Skeleton className="h-16 w-full rounded-md" />
+              <Skeleton className="h-16 w-full rounded-md" />
+              <Skeleton className="h-16 w-full rounded-md" />
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -157,8 +235,19 @@ export function WorkspaceDetailClient({ workspaceId }: { workspaceId: string }) 
           </div>
         </div>
 
-        {/* Admin Action Buttons */}
+        {/* Action Buttons */}
         <div className="flex items-center gap-2">
+          {/* Share Button (Accessible by Admin and Officer) */}
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5 text-xs h-8"
+            onClick={() => setShareModalOpen(true)}
+          >
+            <Share2 className="w-3.5 h-3.5 text-primary" />
+            <span>Bagikan</span>
+          </Button>
+
           {user?.role === "admin" && (
             <>
               <Link href={`/workspaces/${workspaceId}/import`}>
@@ -236,6 +325,14 @@ export function WorkspaceDetailClient({ workspaceId }: { workspaceId: string }) 
             router.push("/workspaces");
           }
         }}
+      />
+
+      {/* Share Modal */}
+      <WorkspaceShareDialog
+        open={shareModalOpen}
+        onOpenChange={setShareModalOpen}
+        workspaceId={workspaceId}
+        workspaceName={workspace.name}
       />
 
       {/* Main Split Layout: Left Sidebar Peserta + Right Panel Checklist */}

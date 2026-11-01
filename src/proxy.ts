@@ -19,10 +19,10 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith("/audit-logs") ||
     pathname.startsWith("/profile");
 
-  // Jika belum login dan mengakses area dashboard, arahkan ke login
+  // Jika belum login dan mengakses area dashboard, arahkan ke login beserta callbackUrl
   if (isDashboardRoute && !sessionToken) {
     const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("from", pathname);
+    loginUrl.searchParams.set("callbackUrl", pathname);
     return NextResponse.redirect(loginUrl);
   }
 
