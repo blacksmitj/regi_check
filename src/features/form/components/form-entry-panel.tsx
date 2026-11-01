@@ -62,6 +62,7 @@ import {
   History,
   UserCheck,
   Clock,
+  ChevronLeft,
 } from "lucide-react";
 
 interface FormEntryPanelProps {
@@ -75,6 +76,11 @@ interface FormEntryPanelProps {
   onUpdateParticipantData?: (data: Record<string, unknown>) => Promise<void>;
   syncStatus: SyncStatus;
   onBackToList?: () => void;
+  onPrevParticipant?: () => void;
+  onNextParticipant?: () => void;
+  hasPrev?: boolean;
+  hasNext?: boolean;
+  participantIndexInfo?: string;
 }
 
 interface FormSectionGroup {
@@ -96,6 +102,11 @@ export function FormEntryPanel({
   onUpdateParticipantData,
   syncStatus,
   onBackToList,
+  onPrevParticipant,
+  onNextParticipant,
+  hasPrev,
+  hasNext,
+  participantIndexInfo,
 }: FormEntryPanelProps) {
   const fields = directFormFields || checklistItems || [];
 
@@ -608,7 +619,7 @@ export function FormEntryPanel({
                             </div>
                           </label>
 
-                          {strVal && (
+                          {strVal && !isDrive && (
                             <Button
                               type="button"
                               variant="ghost"
@@ -623,19 +634,16 @@ export function FormEntryPanel({
                             </Button>
                           )}
                         </div>
-                        <Input
-                          placeholder="Link Google Drive foto atau URL gambar..."
-                          value={strVal}
-                          onChange={(e) =>
-                            handleFieldValueChange(fieldKey, e.target.value)
-                          }
-                          className="text-xs h-8"
-                        />
-                        {isDrive && (
-                          <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
-                            <CheckCircle2 className="w-3 h-3" /> Link Google
-                            Drive terdeteksi otomatis
-                          </span>
+
+                        {!isDrive && (
+                          <Input
+                            placeholder="Link Google Drive foto atau URL gambar..."
+                            value={strVal}
+                            onChange={(e) =>
+                              handleFieldValueChange(fieldKey, e.target.value)
+                            }
+                            className="text-xs h-8"
+                          />
                         )}
                       </div>
                     )}
@@ -835,13 +843,20 @@ export function FormEntryPanel({
                   <div className="pt-1 space-y-3">
                     {/* If participant data contains a direct link / Drive URL */}
                     {strVal && (
-                      <div className="flex items-center justify-between p-2.5 rounded-lg border border-border bg-muted/40 max-w-lg">
+                      <div
+                        onClick={() =>
+                          handleOpenPreview(strVal, field.label, "file")
+                        }
+                        className="flex items-center justify-between p-2.5 rounded-lg border border-border bg-muted/40 hover:bg-muted/70 cursor-pointer transition-colors max-w-lg group"
+                      >
                         <div className="flex items-center gap-2 truncate pr-2">
                           <FileText className="w-4 h-4 text-primary shrink-0" />
                           <div className="truncate">
-                            <p className="text-xs font-medium truncate">
-                              {strVal}
-                            </p>
+                            {!isDrive && (
+                              <p className="text-xs font-medium truncate">
+                                {strVal}
+                              </p>
+                            )}
                             {(isDrive || isPdf) && (
                               <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
                                 <CheckCircle2 className="w-3 h-3" />{" "}
@@ -853,28 +868,31 @@ export function FormEntryPanel({
                         <Button
                           type="button"
                           size="sm"
-                          variant="outline"
-                          onClick={() =>
-                            handleOpenPreview(strVal, field.label, "file")
-                          }
-                          className="h-7 text-xs text-primary gap-1 shrink-0"
+                          variant="ghost"
+                          className="h-7 text-xs text-primary gap-1 shrink-0 group-hover:bg-background/80"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenPreview(strVal, field.label, "file");
+                          }}
                         >
                           <ExternalLink className="w-3 h-3" />
-                          Preview Dokumen
+                          Preview
                         </Button>
                       </div>
                     )}
 
                     {isEditable && (
                       <div className="space-y-2 max-w-lg">
-                        <Input
-                          placeholder="Link Google Drive dokumen / PDF..."
-                          value={strVal}
-                          onChange={(e) =>
-                            handleFieldValueChange(fieldKey, e.target.value)
-                          }
-                          className="text-xs h-8"
-                        />
+                        {!isDrive && (
+                          <Input
+                            placeholder="Link Google Drive dokumen / PDF..."
+                            value={strVal}
+                            onChange={(e) =>
+                              handleFieldValueChange(fieldKey, e.target.value)
+                            }
+                            className="text-xs h-8"
+                          />
+                        )}
 
                         <div className="flex items-center gap-3">
                           <label className="cursor-pointer">
@@ -1209,7 +1227,7 @@ export function FormEntryPanel({
       </div>
 
       {/* Main Form Fields Container */}
-      <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-5 space-y-3">
+      <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-5 space-y-3 pb-24 md:pb-5">
         {activeInputFields.length === 0 ? (
           <div className="p-8 text-center text-muted-foreground border border-dashed rounded-lg">
             <AlertCircle className="w-8 h-8 mx-auto mb-2 text-muted-foreground/60" />
@@ -1316,6 +1334,53 @@ export function FormEntryPanel({
             })}
           </div>
         )}
+      </div>
+
+      {/* Mobile Floating Sticky Bottom Navigation Bar */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-card/95 backdrop-blur-md border-t border-border px-3 py-2 flex items-center justify-between gap-2 shadow-lg">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onPrevParticipant}
+          disabled={!hasPrev || !onPrevParticipant}
+          className="h-9 px-2.5 text-xs gap-1 shrink-0"
+        >
+          <ChevronLeft className="w-4 h-4" />
+          <span className="hidden xs:inline">Sebelumnya</span>
+        </Button>
+
+        <div className="flex flex-col items-center justify-center min-w-0 flex-1 px-1">
+          {participantIndexInfo && (
+            <span className="text-[10px] font-semibold text-muted-foreground truncate">
+              {participantIndexInfo}
+            </span>
+          )}
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <AutosaveIndicator
+              status={
+                draftLoading
+                  ? "saved"
+                  : saving
+                    ? "saving"
+                    : dirty
+                      ? "pending"
+                      : syncStatus
+              }
+              onRetry={saveError ? handleSave : undefined}
+            />
+          </div>
+        </div>
+
+        <Button
+          size="sm"
+          variant="default"
+          onClick={onNextParticipant}
+          disabled={!hasNext || !onNextParticipant}
+          className="h-9 px-2.5 text-xs gap-1 shrink-0"
+        >
+          <span className="hidden xs:inline">Berikutnya</span>
+          <ChevronRight className="w-4 h-4" />
+        </Button>
       </div>
 
       {/* Media Preview Modal (Foto & PDF) */}

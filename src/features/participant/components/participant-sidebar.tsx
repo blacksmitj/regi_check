@@ -18,6 +18,7 @@ interface ParticipantSidebarProps {
   selectedId: string | null;
   onSelect: (id: string) => void;
   className?: string;
+  onFilteredChange?: (filtered: Participant[]) => void;
 }
 
 export function ParticipantSidebar({
@@ -98,36 +99,40 @@ export function ParticipantSidebar({
         {/* Status filter tabs */}
         <div className="grid grid-cols-4 gap-1 text-[11px]">
           <button
+            type="button"
             onClick={() => setFilterStatus("all")}
-            className={`py-1 rounded text-center font-medium transition-colors ${filterStatus === "all"
-                ? "bg-primary text-primary-foreground font-semibold"
+            className={`py-1.5 sm:py-1 rounded-md text-center font-medium transition-colors cursor-pointer select-none ${filterStatus === "all"
+                ? "bg-primary text-primary-foreground font-semibold shadow-2xs"
                 : "bg-muted/60 text-muted-foreground hover:bg-muted"
               }`}
           >
             Semua ({counts.all})
           </button>
           <button
+            type="button"
             onClick={() => setFilterStatus("incomplete")}
-            className={`py-1 rounded text-center font-medium transition-colors ${filterStatus === "incomplete"
-                ? "bg-amber-500 text-white font-semibold"
+            className={`py-1.5 sm:py-1 rounded-md text-center font-medium transition-colors cursor-pointer select-none ${filterStatus === "incomplete"
+                ? "bg-amber-500 text-white font-semibold shadow-2xs"
                 : "bg-muted/60 text-muted-foreground hover:bg-muted"
               }`}
           >
             Belum ({counts.incomplete})
           </button>
           <button
+            type="button"
             onClick={() => setFilterStatus("complete")}
-            className={`py-1 rounded text-center font-medium transition-colors ${filterStatus === "complete"
-                ? "bg-emerald-600 text-white font-semibold"
+            className={`py-1.5 sm:py-1 rounded-md text-center font-medium transition-colors cursor-pointer select-none ${filterStatus === "complete"
+                ? "bg-emerald-600 text-white font-semibold shadow-2xs"
                 : "bg-muted/60 text-muted-foreground hover:bg-muted"
               }`}
           >
             Lengkap ({counts.complete})
           </button>
           <button
+            type="button"
             onClick={() => setFilterStatus("rejected")}
-            className={`py-1 rounded text-center font-medium transition-colors ${filterStatus === "rejected"
-                ? "bg-rose-600 text-white font-semibold"
+            className={`py-1.5 sm:py-1 rounded-md text-center font-medium transition-colors cursor-pointer select-none ${filterStatus === "rejected"
+                ? "bg-rose-600 text-white font-semibold shadow-2xs"
                 : "bg-muted/60 text-muted-foreground hover:bg-muted"
               }`}
           >
@@ -194,7 +199,7 @@ export function ParticipantSidebar({
               <div
                 key={p.id}
                 onClick={() => onSelect(p.id)}
-                className={`p-3 text-left cursor-pointer transition-colors ${isSelected
+                className={`p-3.5 sm:p-3 text-left cursor-pointer transition-colors active:bg-muted/70 ${isSelected
                     ? "bg-primary/10 border-l-4 border-l-primary"
                     : "hover:bg-muted/40"
                   }`}

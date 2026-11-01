@@ -79,24 +79,24 @@ export function MediaPreviewModal({
         onOpenChange(val);
       }}
     >
-      <DialogContent className="max-w-4xl h-[85vh] p-0 flex flex-col gap-0 overflow-hidden bg-background">
+      <DialogContent className="!w-full !max-w-full !h-full !max-h-full sm:!max-w-4xl sm:!h-[85vh] sm:!max-h-[85vh] !p-0 !rounded-none sm:!rounded-xl flex flex-col gap-0 overflow-hidden bg-background !top-0 !left-0 !translate-x-0 !translate-y-0 sm:!top-1/2 sm:!left-1/2 sm:!-translate-x-1/2 sm:!-translate-y-1/2">
         {/* Header Bar */}
-        <DialogHeader className="p-4 border-b border-border flex flex-row items-center justify-between space-y-0">
-          <div className="flex items-center gap-2 overflow-hidden pr-4">
+        <DialogHeader className="p-3 sm:p-4 border-b border-border flex flex-row items-center justify-between space-y-0 shrink-0 bg-card">
+          <div className="flex items-center gap-2 overflow-hidden min-w-0 pr-2">
             {isImage ? (
-              <ImageIcon className="w-5 h-5 text-primary shrink-0" />
+              <ImageIcon className="w-4 h-4 sm:w-5 sm:h-5 text-primary shrink-0" />
             ) : (
-              <FileText className="w-5 h-5 text-primary shrink-0" />
+              <FileText className="w-4 h-4 sm:w-5 sm:h-5 text-primary shrink-0" />
             )}
-            <DialogTitle className="text-sm font-semibold truncate">
+            <DialogTitle className="text-xs sm:text-sm font-semibold truncate">
               {title || "Preview Berkas"}
             </DialogTitle>
           </div>
 
-          <div className="flex items-center gap-1.5 mr-6">
-            {/* Image zoom controls */}
+          <div className="flex items-center gap-1.5 mr-7 sm:mr-8 shrink-0">
+            {/* Desktop zoom & rotate controls (Hidden on mobile, mobile gets bottom floating bar) */}
             {isImage && (
-              <>
+              <div className="hidden sm:flex items-center gap-1.5">
                 <Button
                   variant="outline"
                   size="icon"
@@ -127,25 +127,26 @@ export function MediaPreviewModal({
                 >
                   <RotateCw className="w-3.5 h-3.5" />
                 </Button>
-              </>
+              </div>
             )}
 
             <Button
               variant="outline"
               size="sm"
               onClick={() => window.open(url, "_blank")}
-              className="h-8 text-xs gap-1.5"
+              className="h-7 sm:h-8 text-[11px] sm:text-xs gap-1 sm:gap-1.5 px-2 sm:px-3"
             >
-              <ExternalLink className="w-3.5 h-3.5" />
-              Buka di Tab Baru
+              <ExternalLink className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+              <span className="hidden xs:inline">Buka Tab Baru</span>
+              <span className="xs:hidden">Tab Baru</span>
             </Button>
           </div>
         </DialogHeader>
 
         {/* Viewer Content */}
-        <div className="flex-1 bg-muted/40 relative overflow-auto flex items-center justify-center p-4">
+        <div className="flex-1 bg-muted/40 relative overflow-auto flex items-center justify-center p-2 sm:p-4 pb-16 sm:pb-4">
           {isImage ? (
-            <div className="transition-transform duration-150 ease-out flex items-center justify-center min-h-full">
+            <div className="transition-transform duration-150 ease-out flex items-center justify-center min-h-full w-full">
               <img
                 src={previewUrl}
                 alt={title}
@@ -153,7 +154,7 @@ export function MediaPreviewModal({
                   transform: `scale(${zoom}) rotate(${rotation}deg)`,
                   transformOrigin: "center center",
                 }}
-                className="max-h-[70vh] max-w-full object-contain rounded shadow-sm select-none"
+                className="max-h-[75vh] sm:max-h-[70vh] max-w-full object-contain rounded shadow-sm select-none"
               />
             </div>
           ) : (
@@ -165,6 +166,52 @@ export function MediaPreviewModal({
             />
           )}
         </div>
+
+        {/* Mobile Floating Bottom Controls Bar (khusus mobile layar sentuh) */}
+        {isImage && (
+          <div className="sm:hidden absolute bottom-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 bg-background/90 backdrop-blur-md px-3 py-1.5 rounded-full border border-border shadow-lg">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 rounded-full"
+              onClick={handleZoomOut}
+              title="Perkecil"
+            >
+              <ZoomOut className="w-4 h-4" />
+            </Button>
+            <span className="text-[11px] font-mono text-muted-foreground px-1 min-w-[40px] text-center">
+              {Math.round(zoom * 100)}%
+            </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 rounded-full"
+              onClick={handleZoomIn}
+              title="Perbesar"
+            >
+              <ZoomIn className="w-4 h-4" />
+            </Button>
+            <div className="h-4 w-px bg-border mx-0.5" />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 rounded-full"
+              onClick={handleRotate}
+              title="Putar 90°"
+            >
+              <RotateCw className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 text-[11px] px-2 rounded-full"
+              onClick={handleReset}
+              title="Reset Zoom"
+            >
+              Reset
+            </Button>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

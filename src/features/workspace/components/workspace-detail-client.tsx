@@ -81,6 +81,21 @@ export function WorkspaceDetailClient({ workspaceId }: { workspaceId: string }) 
   }, [participants, selectedParticipantId]);
 
   const activeParticipant = participants.find((p) => p.id === selectedParticipantId);
+  const activeIndex = participants.findIndex((p) => p.id === selectedParticipantId);
+  const hasPrevParticipant = activeIndex > 0;
+  const hasNextParticipant = activeIndex >= 0 && activeIndex < participants.length - 1;
+
+  const handlePrevParticipant = () => {
+    if (hasPrevParticipant) {
+      setSelectedParticipantId(participants[activeIndex - 1].id);
+    }
+  };
+
+  const handleNextParticipant = () => {
+    if (hasNextParticipant) {
+      setSelectedParticipantId(participants[activeIndex + 1].id);
+    }
+  };
 
   // Fetch responses for active participant
   const { data: activeResponses = [] } = useQuery({
@@ -204,30 +219,30 @@ export function WorkspaceDetailClient({ workspaceId }: { workspaceId: string }) 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden">
       {/* Workspace Operational Header */}
-      <div className="px-4 py-2.5 border-b border-border bg-card/80 flex flex-wrap items-center justify-between gap-3 shrink-0">
-        <div className="flex items-center gap-3">
+      <div className="px-3 sm:px-4 py-2 border-b border-border bg-card/80 flex items-center justify-between gap-2 shrink-0">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
           <Link href="/workspaces">
-            <Button variant="ghost" size="icon" className="h-8 w-8">
+            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
               <ArrowLeft className="w-4 h-4" />
             </Button>
           </Link>
 
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-sm md:text-base font-bold tracking-tight text-foreground line-clamp-1">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <h1 className="text-xs sm:text-sm md:text-base font-bold tracking-tight text-foreground truncate">
                 {workspace.name}
               </h1>
-              <Badge variant={workspace.status === "active" ? "default" : "secondary"} className="text-[10px] py-0">
+              <Badge variant={workspace.status === "active" ? "default" : "secondary"} className="text-[10px] py-0 shrink-0">
                 {workspace.status === "active" ? "Aktif" : "Diarsipkan"}
               </Badge>
             </div>
-            <p className="text-[11px] text-muted-foreground flex items-center gap-2 mt-0.5">
-              <span className="flex items-center gap-1">
-                <Calendar className="w-3 h-3" />
-                {workspace.startDate} s/d {workspace.endDate}
+            <p className="text-[10px] sm:text-[11px] text-muted-foreground flex items-center gap-1.5 sm:gap-2 mt-0.5 truncate">
+              <span className="flex items-center gap-1 truncate">
+                <Calendar className="w-3 h-3 shrink-0" />
+                <span className="truncate">{workspace.startDate} s/d {workspace.endDate}</span>
               </span>
               <span>•</span>
-              <span className="flex items-center gap-1">
+              <span className="flex items-center gap-1 shrink-0">
                 <Users className="w-3 h-3" />
                 {participants.length} Peserta
               </span>
@@ -235,9 +250,9 @@ export function WorkspaceDetailClient({ workspaceId }: { workspaceId: string }) 
           </div>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex items-center gap-2">
-          {/* Share Button (Accessible by Admin and Officer) */}
+        {/* Action Buttons: Desktop (Inline) */}
+        <div className="hidden md:flex items-center gap-2">
+          {/* Share Button */}
           <Button
             size="sm"
             variant="outline"
@@ -247,6 +262,14 @@ export function WorkspaceDetailClient({ workspaceId }: { workspaceId: string }) 
             <Share2 className="w-3.5 h-3.5 text-primary" />
             <span>Bagikan</span>
           </Button>
+
+          {/* Export */}
+          <Link href={`/workspaces/${workspaceId}/export`}>
+            <Button size="sm" variant="outline" className="gap-1.5 text-xs h-8">
+              <Download className="w-3.5 h-3.5" />
+              <span>Export</span>
+            </Button>
+          </Link>
 
           {user?.role === "admin" && (
             <>
@@ -266,12 +289,6 @@ export function WorkspaceDetailClient({ workspaceId }: { workspaceId: string }) 
                 <Button size="sm" variant="outline" className="gap-1.5 text-xs h-8">
                   <Settings className="w-3.5 h-3.5" />
                   <span>Setting Workspace</span>
-                </Button>
-              </Link>
-              <Link href={`/workspaces/${workspaceId}/export`}>
-                <Button size="sm" variant="outline" className="gap-1.5 text-xs h-8">
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Export</span>
                 </Button>
               </Link>
 
@@ -305,6 +322,80 @@ export function WorkspaceDetailClient({ workspaceId }: { workspaceId: string }) 
               </DropdownMenu>
             </>
           )}
+        </div>
+
+        {/* Action Buttons: Mobile (Single Dropdown Kebab) */}
+        <div className="flex md:hidden items-center gap-1">
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button size="icon" variant="outline" className="h-8 w-8">
+                  <MoreVertical className="w-4 h-4" />
+                  <span className="sr-only">Menu Aksi Workspace</span>
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="end" className="w-56 p-1.5">
+              <DropdownMenuItem
+                onClick={() => setShareModalOpen(true)}
+                className="text-xs gap-2.5 py-2 cursor-pointer"
+              >
+                <Share2 className="w-4 h-4 text-primary" />
+                <span>Bagikan Workspace</span>
+              </DropdownMenuItem>
+
+              <DropdownMenuItem
+                onClick={() => router.push(`/workspaces/${workspaceId}/export`)}
+                className="text-xs gap-2.5 py-2 cursor-pointer"
+              >
+                <Download className="w-4 h-4 text-muted-foreground" />
+                <span>Export Data</span>
+              </DropdownMenuItem>
+
+              {user?.role === "admin" && (
+                <>
+                  <DropdownMenuSeparator className="my-1" />
+                  <DropdownMenuItem
+                    onClick={() => router.push(`/workspaces/${workspaceId}/import`)}
+                    className="text-xs gap-2.5 py-2 cursor-pointer"
+                  >
+                    <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                    <span>Import Excel</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => router.push(`/workspaces/${workspaceId}/form-settings`)}
+                    className="text-xs gap-2.5 py-2 cursor-pointer"
+                  >
+                    <FileCheck2 className="w-4 h-4 text-primary" />
+                    <span>Atur Form Checklist</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => router.push(`/workspaces/${workspaceId}/settings`)}
+                    className="text-xs gap-2.5 py-2 cursor-pointer"
+                  >
+                    <Settings className="w-4 h-4 text-muted-foreground" />
+                    <span>Pengaturan Workspace</span>
+                  </DropdownMenuItem>
+
+                  <DropdownMenuSeparator className="my-1" />
+                  <DropdownMenuItem
+                    onClick={() => setConfirmModal({ open: true, type: "clean_data" })}
+                    className="text-xs text-amber-700 dark:text-amber-400 gap-2.5 py-2 cursor-pointer"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    <span>Bersihkan Data Form</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setConfirmModal({ open: true, type: "delete_workspace" })}
+                    className="text-xs text-destructive focus:text-destructive gap-2.5 py-2 cursor-pointer"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span>Hapus Workspace</span>
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -380,6 +471,13 @@ export function WorkspaceDetailClient({ workspaceId }: { workspaceId: string }) 
               }}
               syncStatus={syncStatus}
               onBackToList={() => setMobileShowChecklist(false)}
+              onPrevParticipant={handlePrevParticipant}
+              onNextParticipant={handleNextParticipant}
+              hasPrev={hasPrevParticipant}
+              hasNext={hasNextParticipant}
+              participantIndexInfo={
+                activeIndex >= 0 ? `${activeIndex + 1} dari ${participants.length} peserta` : undefined
+              }
             />
           </div>
         ) : (
