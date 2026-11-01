@@ -36,6 +36,8 @@ import {
 import { useAuthStore } from "@/stores/auth-store";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
+import { toast } from "@/components/ui/toast";
+import { clearWorkspaceOfflineDrafts } from "@/lib/storage/indexed-db";
 
 export function WorkspaceDetailClient({ workspaceId }: { workspaceId: string }) {
   const router = useRouter();
@@ -407,9 +409,17 @@ export function WorkspaceDetailClient({ workspaceId }: { workspaceId: string }) 
         workspaceName={workspace.name}
         onConfirm={async () => {
           if (confirmModal.type === "clean_data") {
-            await api.cleanWorkspaceResponses(workspaceId);
-            queryClient.invalidateQueries({ queryKey: ["participants", workspaceId] });
-            queryClient.invalidateQueries({ queryKey: ["responses"] });
+            try {
+              await api.cleanWorkspaceResponses(workspaceId);
+              await clearWorkspaceOfflineDrafts(workspaceId, participants.map((p) => p.id));
+              await queryClient.invalidateQueries({ queryKey: ["participants", workspaceId] });
+              await queryClient.invalidateQueries({ queryKey: ["responses"] });
+              await queryClient.invalidateQueries({ queryKey: ["auditLogs"] });
+              toast.success("Data form berhasil dibersihkan & di-reset ke kondisi awal");
+            } catch (err) {
+              console.error(err);
+              toast.error("Gagal membersihkan data form workspace");
+            }
           } else {
             await api.deleteWorkspace(workspaceId);
             queryClient.invalidateQueries({ queryKey: ["workspaces"] });

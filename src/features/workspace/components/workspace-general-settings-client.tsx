@@ -12,6 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { WorkspaceConfirmationDialog } from "./workspace-confirmation-dialog";
+import { toast } from "@/components/ui/toast";
+import { clearWorkspaceOfflineDrafts } from "@/lib/storage/indexed-db";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -372,9 +374,16 @@ export function WorkspaceGeneralSettingsClient({ workspaceId }: { workspaceId: s
         workspaceName={workspace?.name || ""}
         onConfirm={async () => {
           if (confirmModal.type === "clean_data") {
-            await api.cleanWorkspaceResponses(workspaceId);
-            queryClient.invalidateQueries({ queryKey: ["participants", workspaceId] });
-            queryClient.invalidateQueries({ queryKey: ["responses"] });
+            try {
+              await api.cleanWorkspaceResponses(workspaceId);
+              await clearWorkspaceOfflineDrafts(workspaceId);
+              await queryClient.invalidateQueries({ queryKey: ["participants", workspaceId] });
+              await queryClient.invalidateQueries({ queryKey: ["responses"] });
+              toast.success("Data form berhasil dibersihkan & di-reset ke kondisi awal");
+            } catch (err) {
+              console.error(err);
+              toast.error("Gagal membersihkan data form workspace");
+            }
           } else {
             await api.deleteWorkspace(workspaceId);
             queryClient.invalidateQueries({ queryKey: ["workspaces"] });

@@ -112,6 +112,27 @@ export async function deleteOfflineDraft(
   await db.delete("offline_drafts", participantId);
 }
 
+export async function clearWorkspaceOfflineDrafts(
+  workspaceId: string,
+  participantIds?: string[]
+): Promise<void> {
+  const db = await getDB();
+  if (!db) return;
+
+  if (participantIds && participantIds.length > 0) {
+    for (const pId of participantIds) {
+      await db.delete("offline_drafts", pId);
+    }
+  } else {
+    const all = await db.getAll("offline_drafts");
+    for (const draft of all) {
+      if (draft.workspaceId === workspaceId) {
+        await db.delete("offline_drafts", draft.participantId);
+      }
+    }
+  }
+}
+
 /**
  * Flush all offline drafts to backend when connection is restored
  */
