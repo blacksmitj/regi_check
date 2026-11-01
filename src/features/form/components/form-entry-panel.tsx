@@ -1000,10 +1000,6 @@ export function FormEntryPanel({
             </div>
             <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5 flex-wrap">
               <span>{resolvedUniqueKeyLabel}: <span className="font-medium text-foreground">{uniqueKeyValue}</span></span>
-              <span>•</span>
-              <span>
-                HP: {String(formData["Nomor HP"] || formData["HP"] || "-")}
-              </span>
             </div>
             {lastOfficer ? (
               <div className="text-[11px] text-muted-foreground flex items-center gap-1.5 mt-1 flex-wrap">

@@ -118,7 +118,7 @@ export default function LoginPage() {
 
         {/* Footer info */}
         <div className="relative z-10 pt-6 border-t border-border/80 flex items-center justify-between text-xs text-muted-foreground">
-          <span>&copy; {new Date().getFullYear()} RegiCheck System</span>
+          <span>&copy; RegiCheck System</span>
           <span>Versi 1.0</span>
         </div>
       </div>
