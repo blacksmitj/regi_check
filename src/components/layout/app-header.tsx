@@ -28,7 +28,6 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
@@ -243,51 +242,76 @@ function AppHeaderInner({ serverUser }: { serverUser?: AppHeaderProps["user"] })
                 </div>
                 <ChevronDown className="w-3.5 h-3.5 text-muted-foreground ml-0.5" />
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel className="font-normal">
-                  <div className="flex flex-col space-y-1 py-1">
-                    <p className="text-sm font-semibold leading-none">{user.name}</p>
-                    <p className="text-xs text-muted-foreground leading-none truncate">{user.email}</p>
+              <DropdownMenuContent align="end" className="w-60 p-2">
+                {/* User Info Header */}
+                <div className="flex items-center gap-3 px-2 py-2 mb-1 rounded-md bg-muted/50">
+                  <Avatar className="w-9 h-9 border border-border shrink-0">
+                    {user.avatarUrl && <AvatarImage src={user.avatarUrl} alt={user.name} />}
+                    <AvatarFallback className="text-xs font-bold">{user.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex flex-col min-w-0">
+                    <p className="text-sm font-semibold leading-tight truncate">{user.name}</p>
+                    <p className="text-xs text-muted-foreground truncate mt-0.5">{user.email}</p>
+                    <Badge
+                      variant={user.role === "admin" ? "default" : "secondary"}
+                      className="text-[9px] px-1.5 py-0 uppercase tracking-wider font-semibold w-fit mt-1"
+                    >
+                      {user.role}
+                    </Badge>
                   </div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
+                </div>
+
+                <DropdownMenuSeparator className="my-1" />
+
+                {/* Menu Items */}
                 <DropdownMenuGroup>
-                  <DropdownMenuItem onClick={() => router.push("/profile")}>
-                    <User className="w-4 h-4 mr-2" />
-                    <span>Profil</span>
+                  <DropdownMenuItem
+                    className="gap-2.5 px-2 py-2 rounded-md cursor-pointer"
+                    onClick={() => router.push("/profile")}
+                  >
+                    <User className="w-4 h-4 text-muted-foreground" />
+                    <span>Profil Saya</span>
                   </DropdownMenuItem>
 
                   <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>
-                      <Sun className="w-4 h-4 mr-2 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-                      <Moon className="absolute w-4 h-4 mr-2 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-                      <span className="ml-6">Tema Tampilan</span>
+                    <DropdownMenuSubTrigger className="gap-2.5 px-2 py-2 rounded-md cursor-pointer">
+                      {theme === "dark" ? (
+                        <Moon className="w-4 h-4 text-indigo-400" />
+                      ) : theme === "light" ? (
+                        <Sun className="w-4 h-4 text-amber-500" />
+                      ) : (
+                        <Laptop className="w-4 h-4 text-muted-foreground" />
+                      )}
+                      <span>Tema Tampilan</span>
                     </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent className="w-36">
+                    <DropdownMenuSubContent className="w-40 p-1.5">
                       <DropdownMenuRadioGroup value={theme} onValueChange={setTheme}>
-                        <DropdownMenuRadioItem value="light">
-                          <Sun className="w-4 h-4 mr-2 text-amber-500" />
+                        <DropdownMenuRadioItem value="light" className="gap-2.5 px-2 py-2 rounded-md cursor-pointer">
+                          <Sun className="w-4 h-4 text-amber-500" />
                           <span>Terang</span>
                         </DropdownMenuRadioItem>
-                        <DropdownMenuRadioItem value="dark">
-                          <Moon className="w-4 h-4 mr-2 text-indigo-400" />
+                        <DropdownMenuRadioItem value="dark" className="gap-2.5 px-2 py-2 rounded-md cursor-pointer">
+                          <Moon className="w-4 h-4 text-indigo-400" />
                           <span>Gelap</span>
                         </DropdownMenuRadioItem>
-                        <DropdownMenuRadioItem value="system">
-                          <Laptop className="w-4 h-4 mr-2 text-muted-foreground" />
+                        <DropdownMenuRadioItem value="system" className="gap-2.5 px-2 py-2 rounded-md cursor-pointer">
+                          <Laptop className="w-4 h-4 text-muted-foreground" />
                           <span>Sistem</span>
                         </DropdownMenuRadioItem>
                       </DropdownMenuRadioGroup>
                     </DropdownMenuSubContent>
                   </DropdownMenuSub>
                 </DropdownMenuGroup>
-                <DropdownMenuSeparator />
+
+                <DropdownMenuSeparator className="my-1" />
+
                 <DropdownMenuItem
                   variant="destructive"
+                  className="gap-2.5 px-2 py-2 rounded-md cursor-pointer"
                   onClick={handleLogout}
                   disabled={isLoggingOut}
                 >
-                  <LogOut className={`w-4 h-4 mr-2 ${isLoggingOut ? "animate-pulse" : ""}`} />
+                  <LogOut className={`w-4 h-4 ${isLoggingOut ? "animate-pulse" : ""}`} />
                   <span>{isLoggingOut ? "Keluar..." : "Keluar (Logout)"}</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
