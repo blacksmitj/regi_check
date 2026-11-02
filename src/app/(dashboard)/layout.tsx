@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { headers, cookies } from "next/headers";
+import { headers } from "next/headers";
 import { getCurrentUser, isUserRegistered, registerPendingOfficerIfNew } from "@/lib/auth";
 import { AppHeader } from "@/components/layout/app-header";
 import { AuthSync } from "@/components/shared/auth-sync";
@@ -20,12 +20,8 @@ export default async function DashboardLayout({
     headersList.get("x-invoke-path") ||
     "";
 
-  // 1. Jika belum login sama sekali -> bersihkan sisa cookie invalid lalu lempar ke login
+  // 1. Jika belum login sama sekali -> lempar ke login
   if (!user) {
-    const cookieStore = await cookies();
-    cookieStore.delete("better-auth.session_token");
-    cookieStore.delete("__Secure-better-auth.session_token");
-
     if (currentPath && currentPath.startsWith("/workspaces/")) {
       redirect(`/login?callbackUrl=${encodeURIComponent(currentPath)}`);
     }
