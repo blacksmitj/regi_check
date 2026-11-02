@@ -27,6 +27,8 @@ import {
   KeyRound,
   User,
   Image as ImageIcon,
+  FileSpreadsheet,
+  RefreshCw,
 } from "lucide-react";
 
 export function WorkspaceGeneralSettingsClient({ workspaceId }: { workspaceId: string }) {
@@ -279,6 +281,27 @@ export function WorkspaceGeneralSettingsClient({ workspaceId }: { workspaceId: s
                     />
                     <FieldDescription className="text-[10px] text-muted-foreground">Header kolom foto / link Google Drive</FieldDescription>
                   </Field>
+                </div>
+              </div>
+
+              {/* Integrasi Google Spreadsheet Quick Link */}
+              <div className="pt-4 border-t border-border/60">
+                <div className="p-3.5 rounded-lg border bg-muted/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <h3 className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                      <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                      Integrasi & Auto-Sync Google Spreadsheet
+                    </h3>
+                    <p className="text-[11px] text-muted-foreground">
+                      Hubungkan link Google Sheets untuk auto-import peserta baru secara berkala tanpa download CSV manual.
+                    </p>
+                  </div>
+                  <Link href={`/workspaces/${workspaceId}/sheet-sync`}>
+                    <Button type="button" variant="outline" size="sm" className="text-xs gap-1.5 shrink-0 h-8">
+                      <RefreshCw className="w-3.5 h-3.5 text-emerald-600" />
+                      Kelola Sync Sheet
+                    </Button>
+                  </Link>
                 </div>
               </div>
             </FieldGroup>

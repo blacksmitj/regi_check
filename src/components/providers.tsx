@@ -31,10 +31,24 @@ export function AppProviders({ children }: { children: ReactNode }) {
   );
 
   const initAuth = useAuthStore((s) => s.init);
+  const user = useAuthStore((s) => s.user);
 
   useEffect(() => {
     initAuth();
   }, [initAuth]);
+
+  // Periodic background sheet sync runner (runs every 60 seconds when app is active)
+  useEffect(() => {
+    if (!user || user.role !== "admin") return;
+
+    const interval = setInterval(() => {
+      fetch("/api/cron/sync-sheets").catch(() => {
+        // Silent background trigger
+      });
+    }, 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, [user]);
 
   return (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>

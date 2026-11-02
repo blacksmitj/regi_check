@@ -20,8 +20,27 @@ export interface Workspace {
   nameColumn?: string;
   photoColumn?: string;
   importHeaders?: string[];
+  googleSheetUrl?: string;
+  autoSyncEnabled?: boolean;
+  syncIntervalMinutes?: number;
+  lastSyncedAt?: string;
+  lastSyncStatus?: "success" | "failed" | "running";
+  lastSyncMessage?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface SheetSyncLog {
+  id: string;
+  workspaceId: string;
+  triggeredBy: string;
+  status: "success" | "failed";
+  totalRowsFound: number;
+  newAddedCount: number;
+  skippedCount: number;
+  errorMessage?: string;
+  durationMs: number;
+  createdAt: string;
 }
 
 export type FormFieldType =

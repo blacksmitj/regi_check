@@ -112,6 +112,12 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
   const [csvContent, setCsvContent] = useState<string | null>(null);
   const [delimiter, setDelimiter] = useState<string>(",");
 
+  // Import source tab: "file" or "google_sheet"
+  const [importSourceMode, setImportSourceMode] = useState<"file" | "google_sheet">("file");
+  const [googleSheetInputUrl, setGoogleSheetInputUrl] = useState<string>("");
+  const [isFetchingSheet, setIsFetchingSheet] = useState<boolean>(false);
+  const [sheetFetchError, setSheetFetchError] = useState<string | null>(null);
+
   // Step 2: Duplication analysis state
   const [analyzedRows, setAnalyzedRows] = useState<AnalyzedRow[]>([]);
   const [filteredOutSummary, setFilteredOutSummary] = useState<{
@@ -240,6 +246,45 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Data Peserta");
     XLSX.writeFile(wb, "template_peserta.xlsx");
+  };
+
+  const handleFetchGoogleSheet = async () => {
+    if (!googleSheetInputUrl.trim()) {
+      setSheetFetchError("Masukkan URL Google Spreadsheet terlebih dahulu.");
+      return;
+    }
+
+    setIsFetchingSheet(true);
+    setSheetFetchError(null);
+
+    try {
+      // Direct client fetch to parse preview endpoint or Google directly
+      const res = await api.parseGoogleSheetPreview(googleSheetInputUrl);
+      if (!res.headers || res.headers.length === 0) {
+        throw new Error("Dokumen Google Spreadsheet tidak memiliki kolom header atau data kosong.");
+      }
+
+      setFileName(`Google Spreadsheet (${res.spreadsheetId.slice(0, 8)}...)`);
+      setIsCsv(true);
+
+      // Fetch the full CSV text from exportUrl
+      const csvRes = await fetch(res.exportUrl);
+      if (!csvRes.ok) {
+        throw new Error("Gagal mengunduh isi data spreadsheet dari Google.");
+      }
+      const text = await csvRes.text();
+      setCsvContent(text);
+      setDelimiter(",");
+      parseCsvText(text, ",");
+    } catch (err: any) {
+      console.error("Gagal menarik data Google Sheets:", err);
+      setSheetFetchError(
+        err?.message ||
+          "Gagal memuat Google Spreadsheet. Pastikan akses diatur ke 'Anyone with the link can view'."
+      );
+    } finally {
+      setIsFetchingSheet(false);
+    }
   };
 
   const loadSheetData = (wb: XLSX.WorkBook, sheetName: string) => {
@@ -574,69 +619,168 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
       ========================================================================= */}
       {step === 1 && (
         <div className="space-y-6">
-          {/* Card 1A: File Upload */}
+          {/* Card 1A: File Upload or Google Spreadsheet Link */}
           {rawRows.length === 0 ? (
-            <Card className="border shadow-xs">
-              <CardHeader>
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div>
-                    <CardTitle className="text-base font-semibold">Pilih Berkas Peserta</CardTitle>
+            <div className="space-y-4">
+              {/* Source Mode Toggle */}
+              <div className="flex border-b border-border gap-2">
+                <button
+                  type="button"
+                  onClick={() => setImportSourceMode("file")}
+                  className={`flex items-center gap-2 pb-2.5 px-3 text-xs font-semibold border-b-2 transition-colors ${
+                    importSourceMode === "file"
+                      ? "border-primary text-primary"
+                      : "border-transparent text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  Unggah Berkas (Excel / CSV)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setImportSourceMode("google_sheet")}
+                  className={`flex items-center gap-2 pb-2.5 px-3 text-xs font-semibold border-b-2 transition-colors ${
+                    importSourceMode === "google_sheet"
+                      ? "border-emerald-600 text-emerald-600"
+                      : "border-transparent text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                  Link Google Spreadsheet
+                </button>
+              </div>
+
+              {importSourceMode === "file" ? (
+                <Card className="border shadow-xs">
+                  <CardHeader>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <CardTitle className="text-base font-semibold">Pilih Berkas Peserta</CardTitle>
+                        <CardDescription className="text-xs">
+                          Mendukung file format <strong>.csv</strong>, <strong>.xlsx</strong>, dan <strong>.xls</strong>. Data akan disimpan langsung sesuai nama header berkas.
+                        </CardDescription>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={downloadSampleCsv}
+                          className="text-xs gap-1.5 h-8"
+                        >
+                          <Download className="w-3.5 h-3.5 text-blue-600" />
+                          Template CSV
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={downloadSampleExcel}
+                          className="text-xs gap-1.5 h-8"
+                        >
+                          <Download className="w-3.5 h-3.5 text-emerald-600" />
+                          Template Excel
+                        </Button>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="border-2 border-dashed border-border rounded-xl p-12 flex flex-col items-center justify-center text-center bg-card/40">
+                      <div className="flex items-center justify-center gap-2 mb-3">
+                        <FileType className="w-10 h-10 text-blue-600" />
+                        <FileSpreadsheet className="w-10 h-10 text-emerald-600" />
+                      </div>
+                      <p className="text-sm font-semibold mb-1">Pilih File CSV atau Excel Peserta</p>
+                      <p className="text-xs text-muted-foreground max-w-sm mb-5">
+                        Data kolom akan disimpan persis sesuai nama header yang ada di dalam berkas Anda.
+                      </p>
+                      <div>
+                        <input
+                          id="upload-file-initial"
+                          type="file"
+                          accept=".csv, .xlsx, .xls, text/csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
+                          onChange={handleFileUpload}
+                          className="hidden"
+                        />
+                        <Button
+                          size="sm"
+                          className="gap-2 cursor-pointer"
+                          onClick={() => document.getElementById("upload-file-initial")?.click()}
+                        >
+                          <Upload className="w-4 h-4" />
+                          Pilih & Unggah Berkas
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                /* Google Spreadsheet Link Input Card */
+                <Card className="border shadow-xs">
+                  <CardHeader>
+                    <CardTitle className="text-base font-semibold flex items-center gap-2">
+                      <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
+                      Tarik Langsung dari Google Spreadsheet
+                    </CardTitle>
                     <CardDescription className="text-xs">
-                      Mendukung file format <strong>.csv</strong>, <strong>.xlsx</strong>, dan <strong>.xls</strong>. Data akan disimpan langsung sesuai nama header berkas.
+                      Tanpa perlu download CSV manual. Masukkan link publik dokumen Google Spreadsheet Anda.
                     </CardDescription>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={downloadSampleCsv}
-                      className="text-xs gap-1.5 h-8"
-                    >
-                      <Download className="w-3.5 h-3.5 text-blue-600" />
-                      Template CSV
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={downloadSampleExcel}
-                      className="text-xs gap-1.5 h-8"
-                    >
-                      <Download className="w-3.5 h-3.5 text-emerald-600" />
-                      Template Excel
-                    </Button>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="border-2 border-dashed border-border rounded-xl p-12 flex flex-col items-center justify-center text-center bg-card/40">
-                  <div className="flex items-center justify-center gap-2 mb-3">
-                    <FileType className="w-10 h-10 text-blue-600" />
-                    <FileSpreadsheet className="w-10 h-10 text-emerald-600" />
-                  </div>
-                  <p className="text-sm font-semibold mb-1">Pilih File CSV atau Excel Peserta</p>
-                  <p className="text-xs text-muted-foreground max-w-sm mb-5">
-                    Data kolom akan disimpan persis sesuai nama header yang ada di dalam berkas Anda.
-                  </p>
-                  <div>
-                    <input
-                      id="upload-file-initial"
-                      type="file"
-                      accept=".csv, .xlsx, .xls, text/csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
-                      onChange={handleFileUpload}
-                      className="hidden"
-                    />
-                    <Button
-                      size="sm"
-                      className="gap-2 cursor-pointer"
-                      onClick={() => document.getElementById("upload-file-initial")?.click()}
-                    >
-                      <Upload className="w-4 h-4" />
-                      Pilih & Unggah Berkas
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold text-foreground">
+                        URL / Link Google Spreadsheet
+                      </label>
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <Input
+                          value={googleSheetInputUrl}
+                          onChange={(e) => setGoogleSheetInputUrl(e.target.value)}
+                          placeholder="https://docs.google.com/spreadsheets/d/1BxiMVs.../edit?usp=sharing"
+                          className="text-xs font-mono"
+                          disabled={isFetchingSheet}
+                        />
+                        <Button
+                          size="sm"
+                          onClick={handleFetchGoogleSheet}
+                          disabled={isFetchingSheet || !googleSheetInputUrl.trim()}
+                          className="gap-1.5 text-xs h-9 bg-emerald-600 hover:bg-emerald-700 text-white shrink-0"
+                        >
+                          {isFetchingSheet ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              Menarik Data...
+                            </>
+                          ) : (
+                            <>
+                              <RefreshCw className="w-3.5 h-3.5" />
+                              Tarik Data
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+
+                    {sheetFetchError && (
+                      <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                        <span>{sheetFetchError}</span>
+                      </div>
+                    )}
+
+                    <div className="rounded-lg bg-muted/40 border p-3.5 space-y-1.5 text-xs text-muted-foreground">
+                      <p className="font-semibold text-foreground flex items-center gap-1.5">
+                        <Info className="w-3.5 h-3.5 text-primary" />
+                        Panduan Berbagi Dokumen Google:
+                      </p>
+                      <ol className="list-decimal list-inside space-y-1 pl-1">
+                        <li>Buka spreadsheet Anda di Google Drive.</li>
+                        <li>Klik tombol <strong>Bagikan (Share)</strong> di pojok kanan atas.</li>
+                        <li>Ubah Akses umum menjadi: <strong>"Siapa saja yang memiliki link"</strong> (Pengakses lihat-saja).</li>
+                        <li>Salin link dan tempelkan pada input di atas.</li>
+                      </ol>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
           ) : (
             /* Card 1B: File Details, Unique Key Selector, & Preview Table */
             <div className="space-y-5">

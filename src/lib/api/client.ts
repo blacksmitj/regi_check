@@ -9,6 +9,7 @@ import {
   ChecklistResponse,
   Officer,
   AuditLog,
+  SheetSyncLog,
 } from "@/types/domain";
 import { calculateParticipantStatus } from "../domain/status-engine";
 import {
@@ -535,6 +536,66 @@ export const api = {
       throw new Error("Gagal mengunggah file bukti");
     }
     return res.json();
+  },
+
+  // --- Google Sheets Sync ---
+  async getSheetSync(workspaceId: string): Promise<{
+    config: {
+      id: string;
+      googleSheetUrl?: string;
+      autoSyncEnabled: boolean;
+      syncIntervalMinutes: number;
+      lastSyncedAt?: string;
+      lastSyncStatus?: "success" | "failed" | "running";
+      lastSyncMessage?: string;
+      uniqueKeyColumn?: string;
+    };
+    logs: SheetSyncLog[];
+  }> {
+    return fetchJson(`/api/workspaces/${workspaceId}/sync-sheet`);
+  },
+
+  async updateSheetSyncConfig(
+    workspaceId: string,
+    payload: {
+      googleSheetUrl?: string;
+      autoSyncEnabled?: boolean;
+      syncIntervalMinutes?: number;
+    }
+  ): Promise<{ success: boolean; message: string }> {
+    return fetchJson(`/api/workspaces/${workspaceId}/sync-sheet`, {
+      method: "POST",
+      body: JSON.stringify({ action: "update_config", ...payload }),
+    });
+  },
+
+  async triggerSheetSync(workspaceId: string): Promise<{
+    success: boolean;
+    totalRowsFound: number;
+    newAddedCount: number;
+    skippedCount: number;
+    message: string;
+    durationMs: number;
+    error?: string;
+  }> {
+    return fetchJson(`/api/workspaces/${workspaceId}/sync-sheet`, {
+      method: "POST",
+      body: JSON.stringify({ action: "trigger" }),
+    });
+  },
+
+  async parseGoogleSheetPreview(url: string): Promise<{
+    spreadsheetId: string;
+    sheetGid: string;
+    exportUrl: string;
+    headers: string[];
+    totalRows: number;
+    previewRows: Record<string, unknown>[];
+  }> {
+    return fetchJson(`/api/workspaces/parse-sheet`, {
+      method: "POST",
+      body: JSON.stringify({ url }),
+    });
   },
 
   // --- Reset for Demo ---

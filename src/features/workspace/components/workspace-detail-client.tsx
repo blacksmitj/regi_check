@@ -30,6 +30,7 @@ import {
   FileCheck2,
   MoreVertical,
   RotateCcw,
+  RefreshCw,
   Trash2,
   Share2,
 } from "lucide-react";
@@ -279,6 +280,12 @@ export function WorkspaceDetailClient({ workspaceId }: { workspaceId: string }) 
 
           {user?.role === "admin" && (
             <>
+              <Link href={`/workspaces/${workspaceId}/sheet-sync`}>
+                <Button size="sm" variant="outline" className="gap-1.5 text-xs h-8">
+                  <RefreshCw className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Sync Sheet</span>
+                </Button>
+              </Link>
               <Link href={`/workspaces/${workspaceId}/import`}>
                 <Button size="sm" variant="outline" className="gap-1.5 text-xs h-8">
                   <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
@@ -361,6 +368,13 @@ export function WorkspaceDetailClient({ workspaceId }: { workspaceId: string }) 
               {user?.role === "admin" && (
                 <>
                   <DropdownMenuSeparator className="my-1" />
+                  <DropdownMenuItem
+                    onClick={() => router.push(`/workspaces/${workspaceId}/sheet-sync`)}
+                    className="text-xs gap-2.5 py-2 cursor-pointer"
+                  >
+                    <RefreshCw className="w-4 h-4 text-emerald-600" />
+                    <span>Sync Sheet</span>
+                  </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => router.push(`/workspaces/${workspaceId}/import`)}
                     className="text-xs gap-2.5 py-2 cursor-pointer"
