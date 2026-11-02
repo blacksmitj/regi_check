@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { WorkspaceConfirmationDialog } from "./workspace-confirmation-dialog";
+import { CleanDuplicatesDialog } from "./clean-duplicates-dialog";
 import { toast } from "@/components/ui/toast";
 import { clearWorkspaceOfflineDrafts } from "@/lib/storage/indexed-db";
 import Link from "next/link";
@@ -58,6 +59,59 @@ export function WorkspaceGeneralSettingsClient({ workspaceId }: { workspaceId: s
   const [photoColumn, setPhotoColumn] = useState("");
   const [isSavedNotice, setIsSavedNotice] = useState(false);
   const [initialized, setInitialized] = useState(false);
+  const [isCleaningDuplicates, setIsCleaningDuplicates] = useState(false);
+  const [duplicateModal, setDuplicateModal] = useState<{
+    open: boolean;
+    keyColumn: string;
+    nameColumn?: string | null;
+    duplicateCount: number;
+    duplicateGroups: import("./clean-duplicates-dialog").DuplicateGroupItem[];
+  }>({
+    open: false,
+    keyColumn: "",
+    nameColumn: null,
+    duplicateCount: 0,
+    duplicateGroups: [],
+  });
+
+  const handleOpenCleanDuplicates = async () => {
+    setIsCleaningDuplicates(true);
+    try {
+      const preview = await api.cleanDuplicateParticipants(workspaceId, true);
+      if (preview.duplicateCount === 0) {
+        toast.add({ type: "success", title: "Tidak ada peserta duplikat ditemukan" });
+        return;
+      }
+      setDuplicateModal({
+        open: true,
+        keyColumn: preview.keyColumn || workspace?.uniqueKeyColumn || "ID Unik",
+        nameColumn: preview.nameColumn ?? workspace?.nameColumn ?? null,
+        duplicateCount: preview.duplicateCount,
+        duplicateGroups: (preview.duplicateGroups || []) as import("./clean-duplicates-dialog").DuplicateGroupItem[],
+      });
+    } catch (err: any) {
+      console.error(err);
+      toast.add({
+        type: "error",
+        title: err?.message || "Gagal memeriksa peserta duplikat",
+      });
+    } finally {
+      setIsCleaningDuplicates(false);
+    }
+  };
+
+  const handleExecuteCleanDuplicates = async (targetIds?: string[]) => {
+    try {
+      const res = await api.cleanDuplicateParticipants(workspaceId, false, targetIds);
+      await queryClient.invalidateQueries({ queryKey: ["participants", workspaceId] });
+      await queryClient.invalidateQueries({ queryKey: ["responses"] });
+      toast.add({ type: "success", title: `Berhasil menghapus ${res.deletedCount} peserta duplikat` });
+    } catch (err) {
+      console.error(err);
+      toast.add({ type: "error", title: "Gagal menghapus peserta duplikat" });
+      throw err;
+    }
+  };
 
   if (workspace && !initialized) {
     setName(workspace.name || "");
@@ -365,6 +419,30 @@ export function WorkspaceGeneralSettingsClient({ workspaceId }: { workspaceId: s
             </CardContent>
           </Card>
 
+          <Card className="border-amber-500/30 bg-amber-500/5">
+            <CardHeader className="p-4 pb-2">
+              <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Trash2 className="w-4 h-4 text-amber-600 dark:text-amber-500" />
+                Bersihkan Peserta Duplikat
+              </CardTitle>
+              <CardDescription className="text-xs text-muted-foreground">
+                Hapus peserta dengan ID unik ganda. Data dengan pembaruan terbaru dipertahankan.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-4 pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isCleaningDuplicates}
+                className="w-full border-amber-500/40 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10 text-xs gap-1.5"
+                onClick={handleOpenCleanDuplicates}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                {isCleaningDuplicates ? "Memeriksa Duplikat..." : "Bersihkan Duplikat"}
+              </Button>
+            </CardContent>
+          </Card>
+
           <Card className="border-destructive/30 bg-destructive/5">
             <CardHeader className="p-4 pb-2">
               <CardTitle className="text-sm font-semibold text-destructive flex items-center gap-2">
@@ -413,6 +491,16 @@ export function WorkspaceGeneralSettingsClient({ workspaceId }: { workspaceId: s
             router.push("/workspaces");
           }
         }}
+      />
+
+      <CleanDuplicatesDialog
+        open={duplicateModal.open}
+        onOpenChange={(open) => setDuplicateModal((prev) => ({ ...prev, open }))}
+        keyColumn={duplicateModal.keyColumn}
+        nameColumn={duplicateModal.nameColumn}
+        duplicateCount={duplicateModal.duplicateCount}
+        duplicateGroups={duplicateModal.duplicateGroups}
+        onConfirm={handleExecuteCleanDuplicates}
       />
     </div>
   );

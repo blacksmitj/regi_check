@@ -68,6 +68,11 @@ import {
   Loader2,
 } from "lucide-react";
 import { Participant } from "@/types/domain";
+import {
+  ParticipantKeyOptions,
+  getParticipantCompositeKey,
+  deduplicateRowsPreservingLatest,
+} from "@/lib/domain/participant-identity";
 
 interface AnalyzedRow {
   rowIdx: number;
@@ -345,64 +350,56 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
 
   // Compute duplicate analysis when advancing to Step 2
   const runDuplicationCheck = () => {
-    // 1. Cari baris terakhir untuk setiap kunci unik (ambil baris kemunculan terakhir jika ada duplikat dalam berkas)
-    // Sekaligus catat baris tanpa kunci unik.
-    const lastOccurrenceByKey = new Map<string, number>();
-    let emptyKeyDiscarded = 0;
-    let internalDuplicatesDiscarded = 0;
+    const importKeyOptions: ParticipantKeyOptions = {
+      uniqueKeyColumn: selectedKeyField,
+      nameColumn: selectedNameField || undefined,
+    };
 
-    rawRows.forEach((row, rowIdx) => {
-      const rawKeyValue = row[selectedKeyField] ?? "";
-      const keyValue = String(rawKeyValue).trim();
-      const lowerKey = keyValue.toLowerCase();
+    // 1. Bersihkan duplikat internal pada berkas dan buang kunci kosong (ambil baris kemunculan terakhir)
+    const indexedRows: Array<Record<string, unknown> & { _origRowIdx: number }> = rawRows.map(
+      (row, rowIdx) => ({ ...row, _origRowIdx: rowIdx })
+    );
+    const {
+      filteredRows: deduplicatedRows,
+      internalDuplicatesDiscarded,
+      emptyKeyDiscarded,
+    } = deduplicateRowsPreservingLatest(indexedRows, importKeyOptions);
 
-      if (!lowerKey) {
-        emptyKeyDiscarded++;
-        return;
+    // 2. Buat map existing participants berdasarkan composite key
+    const existingMap = new Map<string, Participant>();
+    existingParticipants.forEach((p) => {
+      const pKey = getParticipantCompositeKey(p.data as Record<string, unknown>, {
+        uniqueKeyColumn: workspace?.uniqueKeyColumn || selectedKeyField,
+        nameColumn: workspace?.nameColumn || selectedNameField || undefined,
+      });
+      if (pKey) {
+        existingMap.set(pKey, p);
       }
-
-      if (lastOccurrenceByKey.has(lowerKey)) {
-        internalDuplicatesDiscarded++;
-      }
-      // Menyimpan rowIdx terakhir untuk lowerKey ini
-      lastOccurrenceByKey.set(lowerKey, rowIdx);
     });
 
-    const keptIndices = new Set(lastOccurrenceByKey.values());
+    // 3. Analisis setiap baris yang lolos seleksi
+    const list: AnalyzedRow[] = deduplicatedRows.map((row) => {
+      const rowIdx = row._origRowIdx ?? 0;
+      const data: Record<string, unknown> = { ...row };
+      delete data._origRowIdx;
 
-    // 2. Buat list baris yang lolos (hanya baris terakhir, mempertahankan urutan baris)
-    const list: AnalyzedRow[] = [];
-
-    rawRows.forEach((row, rowIdx) => {
-      if (!keptIndices.has(rowIdx)) {
-        return;
-      }
-
-      const data = { ...row };
-      const rawKeyValue = row[selectedKeyField] ?? "";
+      const rawKeyValue = data[selectedKeyField] ?? "";
       const keyValue = String(rawKeyValue).trim();
-      const lowerKey = keyValue.toLowerCase();
+      const compositeKey = getParticipantCompositeKey(data, importKeyOptions);
 
-      // Cek apakah ada di workspace existing participants
-      const matchedParticipant = existingParticipants.find((p) => {
-        const valInP = String(p.data[selectedKeyField] ?? "").trim().toLowerCase();
-        return valInP !== "" && valInP === lowerKey;
-      });
-
+      const matchedParticipant = compositeKey ? existingMap.get(compositeKey) : undefined;
       const isDuplicate = !!matchedParticipant;
-      const existingId = matchedParticipant?.id;
-      const existingParticipant = matchedParticipant;
 
-      list.push({
+      return {
         rowIdx,
         data,
         keyValue,
         isDuplicate,
         duplicateType: isDuplicate ? "workspace" : undefined,
-        existingId,
-        existingParticipant,
+        existingId: matchedParticipant?.id,
+        existingParticipant: matchedParticipant,
         action: isDuplicate ? "overwrite" : "create",
-      });
+      };
     });
 
     setFilteredOutSummary({

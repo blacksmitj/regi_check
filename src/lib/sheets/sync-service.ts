@@ -4,6 +4,11 @@ import { eq, desc } from "drizzle-orm";
 import crypto from "crypto";
 import { fetchAndParseGoogleSheet } from "@/lib/sheets/google-sheets";
 import { calculateParticipantStatus } from "@/lib/domain/status-engine";
+import {
+  ParticipantKeyOptions,
+  getParticipantCompositeKey,
+  deduplicateRowsPreservingLatest,
+} from "@/lib/domain/participant-identity";
 
 export interface SyncSheetResult {
   success: boolean;
@@ -63,6 +68,8 @@ export async function syncWorkspaceGoogleSheet(
     const { rows, headers } = parsedSheet;
     const totalRowsFound = rows.length;
 
+    const { nameColumn } = targetWorkspace;
+
     // Check if unique key column exists in sheet headers
     const hasUniqueKey = headers.some(
       (h) => h.trim().toLowerCase() === uniqueKeyColumn.trim().toLowerCase()
@@ -72,6 +79,10 @@ export async function syncWorkspaceGoogleSheet(
     const actualUniqueKey =
       headers.find((h) => h.trim().toLowerCase() === uniqueKeyColumn.trim().toLowerCase()) ||
       uniqueKeyColumn;
+
+    const actualNameColumn = nameColumn
+      ? headers.find((h) => h.trim().toLowerCase() === nameColumn.trim().toLowerCase()) || nameColumn
+      : undefined;
 
     if (!hasUniqueKey && totalRowsFound > 0) {
       throw new Error(
@@ -88,12 +99,17 @@ export async function syncWorkspaceGoogleSheet(
       .from(participant)
       .where(eq(participant.workspaceId, workspaceId));
 
+    const dbKeyOptions: ParticipantKeyOptions = {
+      uniqueKeyColumn,
+      nameColumn,
+    };
+
     const existingKeySet = new Set<string>();
     for (const p of existingParticipants) {
       const pData = p.data as Record<string, unknown>;
-      const val = pData[uniqueKeyColumn] ?? pData[actualUniqueKey];
-      if (val !== undefined && val !== null && String(val).trim() !== "") {
-        existingKeySet.add(String(val).trim().toLowerCase());
+      const compositeKey = getParticipantCompositeKey(pData, dbKeyOptions);
+      if (compositeKey) {
+        existingKeySet.add(compositeKey);
       }
     }
 
@@ -103,8 +119,20 @@ export async function syncWorkspaceGoogleSheet(
       .from(formField)
       .where(eq(formField.workspaceId, workspaceId));
 
-    // 5. Filter only NEW participants and avoid in-sheet internal duplicates
-    const seenInCurrentSheet = new Set<string>();
+    // 5. Filter baris spreadsheet:
+    // a. Buang duplikat internal di dalam spreadsheet dengan mempertahankan baris TERAKHIR (terbaru)
+    const sheetKeyOptions: ParticipantKeyOptions = {
+      uniqueKeyColumn: actualUniqueKey,
+      nameColumn: actualNameColumn,
+    };
+
+    const {
+      filteredRows: deduplicatedSheetRows,
+      internalDuplicatesDiscarded,
+      emptyKeyDiscarded,
+    } = deduplicateRowsPreservingLatest(rows, sheetKeyOptions);
+
+    // b. Filter hanya baris yang BELUM ADA di database
     const newParticipantsToInsert: Array<{
       id: string;
       workspaceId: string;
@@ -112,27 +140,19 @@ export async function syncWorkspaceGoogleSheet(
       status: "complete" | "incomplete" | "rejected";
     }> = [];
 
-    let skippedCount = 0;
+    let alreadyInDbCount = 0;
 
-    for (const row of rows) {
-      const rawVal = row[actualUniqueKey] ?? row[uniqueKeyColumn];
-      const keyVal = rawVal !== undefined && rawVal !== null ? String(rawVal).trim() : "";
+    for (const row of deduplicatedSheetRows) {
+      const compositeKey = getParticipantCompositeKey(row, sheetKeyOptions);
+      if (!compositeKey) continue;
 
-      // Discard empty key
-      if (!keyVal) {
-        skippedCount++;
+      if (existingKeySet.has(compositeKey)) {
+        alreadyInDbCount++;
         continue;
       }
 
-      const lowerKey = keyVal.toLowerCase();
-
-      // Check if already in database OR already seen in earlier rows of this sheet
-      if (existingKeySet.has(lowerKey) || seenInCurrentSheet.has(lowerKey)) {
-        skippedCount++;
-        continue;
-      }
-
-      seenInCurrentSheet.add(lowerKey);
+      // Tandai agar tidak dimasukkan ganda dalam run yang sama
+      existingKeySet.add(compositeKey);
 
       // Compute participant completeness status
       const computedStatus = calculateParticipantStatus(workspaceFields as any, row);
@@ -144,6 +164,8 @@ export async function syncWorkspaceGoogleSheet(
         status: computedStatus as any,
       });
     }
+
+    const skippedCount = internalDuplicatesDiscarded + emptyKeyDiscarded + alreadyInDbCount;
 
     // 6. Batch Insert new participants
     const BATCH_SIZE = 50;

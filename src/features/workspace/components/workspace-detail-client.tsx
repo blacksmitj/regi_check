@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { WorkspaceConfirmationDialog } from "./workspace-confirmation-dialog";
 import { WorkspaceShareDialog } from "./workspace-share-dialog";
+import { CleanDuplicatesDialog, DuplicateGroupItem } from "./clean-duplicates-dialog";
 import Link from "next/link";
 import {
   FileSpreadsheet,
@@ -53,6 +54,59 @@ export function WorkspaceDetailClient({ workspaceId }: { workspaceId: string }) 
     type: "clean_data",
   });
   const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [isCleaningDuplicates, setIsCleaningDuplicates] = useState(false);
+  const [duplicateModal, setDuplicateModal] = useState<{
+    open: boolean;
+    keyColumn: string;
+    nameColumn?: string | null;
+    duplicateCount: number;
+    duplicateGroups: DuplicateGroupItem[];
+  }>({
+    open: false,
+    keyColumn: "",
+    nameColumn: null,
+    duplicateCount: 0,
+    duplicateGroups: [],
+  });
+
+  const handleOpenCleanDuplicates = async () => {
+    setIsCleaningDuplicates(true);
+    try {
+      const preview = await api.cleanDuplicateParticipants(workspaceId, true);
+      if (preview.duplicateCount === 0) {
+        toast.add({ type: "success", title: "Tidak ada peserta duplikat ditemukan" });
+        return;
+      }
+      setDuplicateModal({
+        open: true,
+        keyColumn: preview.keyColumn || workspace?.uniqueKeyColumn || "ID Unik",
+        nameColumn: preview.nameColumn ?? workspace?.nameColumn ?? null,
+        duplicateCount: preview.duplicateCount,
+        duplicateGroups: (preview.duplicateGroups || []) as DuplicateGroupItem[],
+      });
+    } catch (err: any) {
+      console.error(err);
+      toast.add({
+        type: "error",
+        title: err?.message || "Gagal memeriksa peserta duplikat",
+      });
+    } finally {
+      setIsCleaningDuplicates(false);
+    }
+  };
+
+  const handleExecuteCleanDuplicates = async (targetIds?: string[]) => {
+    try {
+      const res = await api.cleanDuplicateParticipants(workspaceId, false, targetIds);
+      await queryClient.invalidateQueries({ queryKey: ["participants", workspaceId] });
+      await queryClient.invalidateQueries({ queryKey: ["responses"] });
+      toast.add({ type: "success", title: `Berhasil menghapus ${res.deletedCount} peserta duplikat` });
+    } catch (err) {
+      console.error(err);
+      toast.add({ type: "error", title: "Gagal menghapus peserta duplikat" });
+      throw err;
+    }
+  };
 
   const [selectedParticipantId, setSelectedParticipantId] = useState<string | null>(null);
   const [mobileShowChecklist, setMobileShowChecklist] = useState(false);
@@ -399,6 +453,14 @@ export function WorkspaceDetailClient({ workspaceId }: { workspaceId: string }) 
 
                   <DropdownMenuSeparator className="my-1" />
                   <DropdownMenuItem
+                    onClick={handleOpenCleanDuplicates}
+                    disabled={isCleaningDuplicates}
+                    className="text-xs text-amber-700 dark:text-amber-400 gap-2.5 py-2 cursor-pointer"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span>{isCleaningDuplicates ? "Memeriksa Duplikat..." : "Bersihkan Peserta Duplikat"}</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
                     onClick={() => setConfirmModal({ open: true, type: "clean_data" })}
                     className="text-xs text-amber-700 dark:text-amber-400 gap-2.5 py-2 cursor-pointer"
                   >
@@ -444,6 +506,17 @@ export function WorkspaceDetailClient({ workspaceId }: { workspaceId: string }) 
             router.push("/workspaces");
           }
         }}
+      />
+
+      {/* Clean Duplicates Modal */}
+      <CleanDuplicatesDialog
+        open={duplicateModal.open}
+        onOpenChange={(open) => setDuplicateModal((prev) => ({ ...prev, open }))}
+        keyColumn={duplicateModal.keyColumn}
+        nameColumn={duplicateModal.nameColumn}
+        duplicateCount={duplicateModal.duplicateCount}
+        duplicateGroups={duplicateModal.duplicateGroups}
+        onConfirm={handleExecuteCleanDuplicates}
       />
 
       {/* Share Modal */}

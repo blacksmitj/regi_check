@@ -131,6 +131,31 @@ export const api = {
     );
   },
 
+  async cleanDuplicateParticipants(
+    id: string,
+    dryRun = false,
+    targetIds?: string[]
+  ): Promise<{
+    success: boolean;
+    keyColumn?: string;
+    nameColumn?: string | null;
+    deletedCount: number;
+    duplicateCount: number;
+    duplicateGroups?: Array<{
+      keyValue: string;
+      nameValue?: string;
+      total: number;
+      retainedParticipant: { id: string; name?: string; updatedAt?: string | null };
+      deletedParticipants: Array<{ id: string; name?: string; updatedAt?: string | null }>;
+    }>;
+  }> {
+    return fetchJson(`/api/workspaces/${id}/clean-duplicates`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dryRun, targetIds }),
+    });
+  },
+
   // --- Form fields per Workspace ---
   async getWorkspaceForm(workspaceId: string): Promise<FormField[]> {
     return fetchJson<FormField[]>(`/api/workspaces/${workspaceId}/form-fields`);
