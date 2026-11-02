@@ -134,6 +134,7 @@ function syncFromRegiCheck() {
       });
 
       var dataRange = sheet.getRange(2, 1, cleanRows.length, headers.length);
+      dataRange.setNumberFormat("@"); // Paksa semua sel sebagai teks agar angka 0 di awal & angka panjang tidak berubah jadi scientific notation
       dataRange.setValues(cleanRows);
       dataRange.setVerticalAlignment("middle");
 
