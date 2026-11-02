@@ -10,6 +10,7 @@ import {
   Officer,
   AuditLog,
   SheetSyncLog,
+  AppscriptSyncLog,
 } from "@/types/domain";
 import { calculateParticipantStatus } from "../domain/status-engine";
 import {
@@ -620,6 +621,42 @@ export const api = {
     return fetchJson(`/api/workspaces/parse-sheet`, {
       method: "POST",
       body: JSON.stringify({ url }),
+    });
+  },
+
+  // --- AppScript Workspace Sync ---
+  async getAppScriptSync(workspaceId: string): Promise<{
+    config: {
+      workspaceId: string;
+      workspaceName: string;
+      apiKey: string;
+      sheetName: string;
+      lockSheet: boolean;
+    };
+    logs: AppscriptSyncLog[];
+  }> {
+    return fetchJson(`/api/workspaces/${workspaceId}/appscript-sync`);
+  },
+
+  async updateAppScriptSyncConfig(
+    workspaceId: string,
+    payload: {
+      sheetName?: string;
+      lockSheet?: boolean;
+    }
+  ): Promise<{ success: boolean; message: string }> {
+    return fetchJson(`/api/workspaces/${workspaceId}/appscript-sync`, {
+      method: "POST",
+      body: JSON.stringify({ action: "update_config", ...payload }),
+    });
+  },
+
+  async regenerateAppScriptApiKey(
+    workspaceId: string
+  ): Promise<{ success: boolean; apiKey: string; message: string }> {
+    return fetchJson(`/api/workspaces/${workspaceId}/appscript-sync`, {
+      method: "POST",
+      body: JSON.stringify({ action: "regenerate_key" }),
     });
   },
 

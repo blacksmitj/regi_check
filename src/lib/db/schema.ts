@@ -136,6 +136,9 @@ export const workspace = pgTable("workspace", {
   lastSyncedAt: timestamp("last_synced_at"),
   lastSyncStatus: text("last_sync_status"), // "success" | "failed" | "running"
   lastSyncMessage: text("last_sync_message"),
+  appscriptApiKey: text("appscript_api_key"),
+  appscriptSheetName: text("appscript_sheet_name").default("Data Peserta"),
+  appscriptLockSheet: boolean("appscript_lock_sheet").notNull().default(false),
   createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at")
@@ -265,3 +268,26 @@ export const sheetSyncLog = pgTable("sheet_sync_log", {
   index("sheet_sync_log_workspace_id_idx").on(table.workspaceId),
   index("sheet_sync_log_created_at_idx").on(table.createdAt),
 ]);
+
+// ==========================================
+// APPSCRIPT SYNC LOGS
+// ==========================================
+
+export const appscriptSyncLog = pgTable("appscript_sync_log", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id")
+    .notNull()
+    .references(() => workspace.id, { onDelete: "cascade" }),
+  status: text("status").notNull(), // "success" | "failed"
+  totalRowsSent: integer("total_rows_sent").notNull().default(0),
+  sheetName: text("sheet_name"),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  durationMs: integer("duration_ms").notNull().default(0),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("appscript_sync_log_workspace_id_idx").on(table.workspaceId),
+  index("appscript_sync_log_created_at_idx").on(table.createdAt),
+]);
+

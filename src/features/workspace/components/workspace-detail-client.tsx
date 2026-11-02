@@ -34,6 +34,7 @@ import {
   RefreshCw,
   Trash2,
   Share2,
+  Code2,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -340,6 +341,12 @@ export function WorkspaceDetailClient({ workspaceId }: { workspaceId: string }) 
                   <span>Sync Sheet</span>
                 </Button>
               </Link>
+              <Link href={`/workspaces/${workspaceId}/appscript-sync`}>
+                <Button size="sm" variant="outline" className="gap-1.5 text-xs h-8">
+                  <Code2 className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                  <span>AppScript Sync</span>
+                </Button>
+              </Link>
               <Link href={`/workspaces/${workspaceId}/import`}>
                 <Button size="sm" variant="outline" className="gap-1.5 text-xs h-8">
                   <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
@@ -428,6 +435,13 @@ export function WorkspaceDetailClient({ workspaceId }: { workspaceId: string }) 
                   >
                     <RefreshCw className="w-4 h-4 text-emerald-600" />
                     <span>Sync Sheet</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => router.push(`/workspaces/${workspaceId}/appscript-sync`)}
+                    className="text-xs gap-2.5 py-2 cursor-pointer"
+                  >
+                    <Code2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                    <span>AppScript Sync</span>
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => router.push(`/workspaces/${workspaceId}/import`)}

@@ -26,6 +26,9 @@ export interface Workspace {
   lastSyncedAt?: string;
   lastSyncStatus?: "success" | "failed" | "running";
   lastSyncMessage?: string;
+  appscriptApiKey?: string;
+  appscriptSheetName?: string;
+  appscriptLockSheet?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -40,6 +43,19 @@ export interface SheetSyncLog {
   skippedCount: number;
   errorMessage?: string;
   durationMs: number;
+  createdAt: string;
+}
+
+export interface AppscriptSyncLog {
+  id: string;
+  workspaceId: string;
+  status: "success" | "failed";
+  totalRowsSent: number;
+  sheetName?: string;
+  ipAddress?: string;
+  userAgent?: string;
+  durationMs: number;
+  errorMessage?: string;
   createdAt: string;
 }
 
