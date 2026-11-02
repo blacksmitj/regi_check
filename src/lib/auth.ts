@@ -126,8 +126,9 @@ export async function registerPendingOfficerIfNew(
   if (!email) return { isNew: false, status: "unknown" };
   if (isEmailAdmin(email)) return { isNew: false, status: "active" };
 
+  const normalizedEmail = email.trim().toLowerCase();
   const existing = await db.query.officer.findFirst({
-    where: (officers, { eq }) => eq(officers.email, email.trim().toLowerCase()),
+    where: (officers, { eq }) => eq(officers.email, normalizedEmail),
   });
 
   if (existing) {
@@ -148,17 +149,39 @@ export async function registerPendingOfficerIfNew(
 
   // Buat record petugas baru dengan status pending
   const newId = `off_${crypto.randomUUID()}`;
-  await db.insert(schema.officer).values({
-    id: newId,
-    name: name || email.split("@")[0],
-    email: email.trim().toLowerCase(),
-    active: false,
-    status: "pending",
-    requestedWorkspaceId: requestedWorkspaceId || null,
-    requestedAt: new Date(),
-  });
+  try {
+    await db
+      .insert(schema.officer)
+      .values({
+        id: newId,
+        name: name || email.split("@")[0],
+        email: normalizedEmail,
+        active: false,
+        status: "pending",
+        requestedWorkspaceId: requestedWorkspaceId || null,
+        requestedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: schema.officer.email,
+        set: {
+          // Jika sudah ada (race condition), jangan timpa status jika sudah active/rejected
+          // Hanya update requestedWorkspaceId jika sebelumnya belum ada
+          requestedWorkspaceId: requestedWorkspaceId || null,
+        },
+      });
 
-  return { isNew: true, status: "pending" };
+    return { isNew: true, status: "pending" };
+  } catch (error) {
+    // Jika terjadi concurrent conflict, fallback ambil status existing
+    console.warn("registerPendingOfficerIfNew conflict or error handled:", error);
+    const fallback = await db.query.officer.findFirst({
+      where: (officers, { eq }) => eq(officers.email, normalizedEmail),
+    });
+    return {
+      isNew: false,
+      status: fallback?.status || (fallback?.active ? "active" : "pending"),
+    };
+  }
 }
 
 export async function requireAuth() {

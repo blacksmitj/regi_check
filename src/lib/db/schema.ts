@@ -197,7 +197,7 @@ export const officer = pgTable("officer", {
   id: text("id").primaryKey(),
   workspaceId: text("workspace_id").references(() => workspace.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
-  email: text("email").notNull(),
+  email: text("email").notNull().unique(),
   active: boolean("active").notNull().default(true),
   /** Status pendaftaran: "active" | "pending" | "rejected" */
   status: text("status").notNull().default("active"), // "active" | "pending" | "rejected"
@@ -211,7 +211,6 @@ export const officer = pgTable("officer", {
     .defaultNow()
     .$onUpdate(() => new Date()),
 }, (table) => [
-  index("officer_email_idx").on(table.email),
   index("officer_status_idx").on(table.status),
 ]);
 

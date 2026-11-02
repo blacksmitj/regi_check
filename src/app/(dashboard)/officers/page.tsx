@@ -166,11 +166,20 @@ export default function OfficersPage() {
     setPasteInput("");
   };
 
-  const pendingCount = officers.filter(
+  // Deduplikasi defensif officers berdasarkan email untuk mencegah duplikasi visual
+  const uniqueOfficers = officers.reduce<Officer[]>((acc, current) => {
+    const exists = acc.some((o) => o.email.toLowerCase() === current.email.toLowerCase());
+    if (!exists) {
+      acc.push(current);
+    }
+    return acc;
+  }, []);
+
+  const pendingCount = uniqueOfficers.filter(
     (o) => o.status === "pending" || (!o.active && o.status !== "rejected" && o.status !== "active")
   ).length;
 
-  const filtered = officers.filter((o) => {
+  const filtered = uniqueOfficers.filter((o) => {
     const matchesSearch =
       o.name.toLowerCase().includes(search.toLowerCase()) ||
       o.email.toLowerCase().includes(search.toLowerCase());

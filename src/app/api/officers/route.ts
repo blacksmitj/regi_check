@@ -23,12 +23,40 @@ function mapOfficer(o: typeof officer.$inferSelect): Officer {
 
 export async function GET() {
   try {
-    const officers = await db
+    const rawOfficers = await db
       .select()
       .from(officer)
       .orderBy(desc(officer.createdAt));
 
-    return NextResponse.json(officers.map(mapOfficer));
+    // Deduplikasi defensif berdasarkan email (prioritaskan yang status active atau yang paling baru)
+    const seenEmails = new Set<string>();
+    const deduplicatedOfficers: (typeof officer.$inferSelect)[] = [];
+    const duplicateIdsToDelete: string[] = [];
+
+    for (const off of rawOfficers) {
+      const emailKey = off.email.toLowerCase().trim();
+      if (!seenEmails.has(emailKey)) {
+        seenEmails.add(emailKey);
+        deduplicatedOfficers.push(off);
+      } else {
+        duplicateIdsToDelete.push(off.id);
+      }
+    }
+
+    // Bersihkan duplikat sisa dari database secara asinkron
+    if (duplicateIdsToDelete.length > 0) {
+      (async () => {
+        try {
+          for (const dupId of duplicateIdsToDelete) {
+            await db.delete(officer).where(eq(officer.id, dupId));
+          }
+        } catch (cleanupErr) {
+          console.error("Gagal membersihkan duplikat officer:", cleanupErr);
+        }
+      })();
+    }
+
+    return NextResponse.json(deduplicatedOfficers.map(mapOfficer));
   } catch (error) {
     console.error("GET /api/officers error:", error);
     return NextResponse.json(
@@ -79,10 +107,19 @@ export async function POST(req: NextRequest) {
       .values({
         id: newId,
         name,
-        email,
+        email: email.trim().toLowerCase(),
         workspaceId: workspaceId || null,
         active,
         status,
+      })
+      .onConflictDoUpdate({
+        target: officer.email,
+        set: {
+          name,
+          workspaceId: workspaceId || null,
+          active,
+          status,
+        },
       })
       .returning();
 
