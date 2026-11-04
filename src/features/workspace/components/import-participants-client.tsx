@@ -70,6 +70,7 @@ import {
 import { Participant } from "@/types/domain";
 import {
   ParticipantKeyOptions,
+  getParticipantUniqueKey,
   getParticipantCompositeKey,
   deduplicateRowsPreservingLatest,
 } from "@/lib/domain/participant-identity";
@@ -365,11 +366,18 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
       emptyKeyDiscarded,
     } = deduplicateRowsPreservingLatest(indexedRows, importKeyOptions);
 
-    // 2. Buat map existing participants berdasarkan composite key
+    // 2. Buat map existing participants berdasarkan primary key (ID/NIK) dan composite key
     const existingMap = new Map<string, Participant>();
     existingParticipants.forEach((p) => {
-      const pKey = getParticipantCompositeKey(p.data as Record<string, unknown>, {
-        uniqueKeyColumn: workspace?.uniqueKeyColumn || selectedKeyField,
+      const pData = p.data as Record<string, unknown>;
+      const primaryKeyCol = workspace?.uniqueKeyColumn || selectedKeyField;
+      const primaryKey = getParticipantUniqueKey(pData, primaryKeyCol);
+      if (primaryKey) {
+        existingMap.set(primaryKey, p);
+      }
+
+      const pKey = getParticipantCompositeKey(pData, {
+        uniqueKeyColumn: primaryKeyCol,
         nameColumn: workspace?.nameColumn || selectedNameField || undefined,
       });
       if (pKey) {
@@ -385,9 +393,12 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
 
       const rawKeyValue = data[selectedKeyField] ?? "";
       const keyValue = String(rawKeyValue).trim();
+      const primaryKey = getParticipantUniqueKey(data, selectedKeyField);
       const compositeKey = getParticipantCompositeKey(data, importKeyOptions);
 
-      const matchedParticipant = compositeKey ? existingMap.get(compositeKey) : undefined;
+      const matchedParticipant =
+        (primaryKey ? existingMap.get(primaryKey) : undefined) ||
+        (compositeKey ? existingMap.get(compositeKey) : undefined);
       const isDuplicate = !!matchedParticipant;
 
       return {

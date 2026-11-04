@@ -5,6 +5,7 @@ import { eq, inArray } from "drizzle-orm";
 import crypto from "crypto";
 import { getCurrentUser } from "@/lib/auth";
 import {
+  getParticipantUniqueKey,
   getParticipantCompositeKey,
   getParticipantIdentityDisplay,
 } from "@/lib/domain/participant-identity";
@@ -41,12 +42,13 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     const groups = new Map<string, typeof rows>();
     for (const p of rows) {
       const data = (p.data || {}) as Record<string, unknown>;
-      const compositeKey = getParticipantCompositeKey(data, keyOptions);
-      if (!compositeKey) continue; // tanpa ID unik: diabaikan
+      // Kelompokkan berdasarkan Kunci Unik primer (NIK / Nomor Peserta)
+      const primaryKey = getParticipantUniqueKey(data, keyColumn);
+      if (!primaryKey) continue; // tanpa ID unik: diabaikan
 
-      const list = groups.get(compositeKey);
+      const list = groups.get(primaryKey);
       if (list) list.push(p);
-      else groups.set(compositeKey, [p]);
+      else groups.set(primaryKey, [p]);
     }
 
     const toDelete: string[] = [];
@@ -54,14 +56,32 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       keyValue: string;
       nameValue?: string;
       total: number;
-      retainedParticipant: { id: string; name?: string; updatedAt?: Date | null };
-      deletedParticipants: Array<{ id: string; name?: string; updatedAt?: Date | null }>;
+      retainedParticipant: { id: string; name?: string; updatedAt?: Date | null; status?: string };
+      deletedParticipants: Array<{ id: string; name?: string; updatedAt?: Date | null; status?: string }>;
     }> = [];
+
+    // Bobot status untuk penentuan prioritas retensi: complete > incomplete > rejected
+    const getStatusWeight = (status: string | null | undefined) => {
+      if (status === "complete") return 2;
+      if (status === "incomplete") return 1;
+      return 0;
+    };
 
     for (const [, list] of groups.entries()) {
       if (list.length < 2) continue;
       const time = (p: (typeof rows)[number]) => (p.updatedAt ? new Date(p.updatedAt).getTime() : 0);
-      list.sort((a, b) => time(b) - time(a) || (a.id < b.id ? 1 : -1));
+      
+      // Urutkan:
+      // 1. Prioritaskan status 'complete' / verifikasi terisi
+      // 2. Jika sama, prioritaskan updatedAt terbaru
+      // 3. Jika sama, id terkecil
+      list.sort((a, b) => {
+        const weightDiff = getStatusWeight(b.status) - getStatusWeight(a.status);
+        if (weightDiff !== 0) return weightDiff;
+        const timeDiff = time(b) - time(a);
+        if (timeDiff !== 0) return timeDiff;
+        return a.id < b.id ? 1 : -1;
+      });
 
       const retained = list[0];
       const deletedList = list.slice(1);
@@ -84,11 +104,13 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
           id: retained.id,
           name: getName(retained),
           updatedAt: retained.updatedAt,
+          status: retained.status,
         },
         deletedParticipants: deletedList.map((d) => ({
           id: d.id,
           name: getName(d),
           updatedAt: d.updatedAt,
+          status: d.status,
         })),
       });
     }
