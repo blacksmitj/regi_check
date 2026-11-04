@@ -5,6 +5,7 @@ import { eq, inArray } from "drizzle-orm";
 import crypto from "crypto";
 import { getCurrentUser } from "@/lib/auth";
 import {
+  getParticipantNik,
   getParticipantUniqueKey,
   getParticipantCompositeKey,
   getParticipantIdentityDisplay,
@@ -29,6 +30,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     }
     const keyColumn = ws.uniqueKeyColumn;
     const nameColumn = ws.nameColumn;
+    const nikColumn = ws.nikColumn;
     if (!keyColumn) {
       return NextResponse.json(
         { error: "Kolom ID unik belum dikonfigurasi untuk workspace ini" },
@@ -36,19 +38,25 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const keyOptions = { uniqueKeyColumn: keyColumn, nameColumn };
+    const keyOptions = { uniqueKeyColumn: keyColumn, nameColumn, nikColumn };
     const rows = await db.select().from(participant).where(eq(participant.workspaceId, id));
 
+    // Kelompokkan duplikat:
+    // 1. Jika baris memiliki NIK, kelompokkan berdasarkan NIK (Prioritas 1)
+    // 2. Jika tidak ada NIK, kelompokkan berdasarkan Gabungan ID + Nama (Prioritas 2)
     const groups = new Map<string, typeof rows>();
     for (const p of rows) {
       const data = (p.data || {}) as Record<string, unknown>;
-      // Kelompokkan berdasarkan Kunci Unik primer (NIK / Nomor Peserta)
-      const primaryKey = getParticipantUniqueKey(data, keyColumn);
-      if (!primaryKey) continue; // tanpa ID unik: diabaikan
+      const nikVal = getParticipantNik(data, nikColumn);
+      const compositeKey = getParticipantCompositeKey(data, keyOptions);
 
-      const list = groups.get(primaryKey);
+      // Kunci grouping: nik:xxx jika ada, atau comp:xxx
+      const groupKey = nikVal ? `nik:${nikVal}` : (compositeKey ? `comp:${compositeKey}` : "");
+      if (!groupKey) continue;
+
+      const list = groups.get(groupKey);
       if (list) list.push(p);
-      else groups.set(primaryKey, [p]);
+      else groups.set(groupKey, [p]);
     }
 
     const toDelete: string[] = [];

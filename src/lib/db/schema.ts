@@ -127,6 +127,7 @@ export const workspace = pgTable("workspace", {
   status: text("status").notNull().default("active"), // "active" | "archived"
   templateId: text("template_id").references(() => formTemplate.id, { onDelete: "set null" }),
   uniqueKeyColumn: text("unique_key_column"),
+  nikColumn: text("nik_column"),
   nameColumn: text("name_column"),
   photoColumn: text("photo_column"),
   importHeaders: jsonb("import_headers").$type<string[]>().default([]),

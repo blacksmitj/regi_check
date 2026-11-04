@@ -6,6 +6,7 @@ import { fetchAndParseGoogleSheet } from "@/lib/sheets/google-sheets";
 import { calculateParticipantStatus } from "@/lib/domain/status-engine";
 import {
   ParticipantKeyOptions,
+  getParticipantNik,
   getParticipantUniqueKey,
   getParticipantCompositeKey,
   deduplicateRowsPreservingLatest,
@@ -69,7 +70,7 @@ export async function syncWorkspaceGoogleSheet(
     const { rows, headers } = parsedSheet;
     const totalRowsFound = rows.length;
 
-    const { nameColumn } = targetWorkspace;
+    const { nameColumn, nikColumn } = targetWorkspace;
 
     // Check if unique key column exists in sheet headers
     const hasUniqueKey = headers.some(
@@ -83,6 +84,10 @@ export async function syncWorkspaceGoogleSheet(
 
     const actualNameColumn = nameColumn
       ? headers.find((h) => h.trim().toLowerCase() === nameColumn.trim().toLowerCase()) || nameColumn
+      : undefined;
+
+    const actualNikColumn = nikColumn
+      ? headers.find((h) => h.trim().toLowerCase() === nikColumn.trim().toLowerCase()) || nikColumn
       : undefined;
 
     if (!hasUniqueKey && totalRowsFound > 0) {
@@ -103,20 +108,21 @@ export async function syncWorkspaceGoogleSheet(
     const dbKeyOptions: ParticipantKeyOptions = {
       uniqueKeyColumn,
       nameColumn,
+      nikColumn,
     };
 
-    const existingKeySet = new Set<string>();
+    const existingNikSet = new Set<string>();
+    const existingCompositeSet = new Set<string>();
+
     for (const p of existingParticipants) {
       const pData = p.data as Record<string, unknown>;
-      // Prioritaskan kunci unik primer (NIK/ID)
-      const primaryKey = getParticipantUniqueKey(pData, uniqueKeyColumn);
-      if (primaryKey) {
-        existingKeySet.add(primaryKey);
+      const pNik = getParticipantNik(pData, nikColumn);
+      if (pNik) {
+        existingNikSet.add(pNik);
       }
-      // Simpan juga composite key untuk kompatibilitas jika ada
       const compositeKey = getParticipantCompositeKey(pData, dbKeyOptions);
       if (compositeKey) {
-        existingKeySet.add(compositeKey);
+        existingCompositeSet.add(compositeKey);
       }
     }
 
@@ -131,6 +137,7 @@ export async function syncWorkspaceGoogleSheet(
     const sheetKeyOptions: ParticipantKeyOptions = {
       uniqueKeyColumn: actualUniqueKey,
       nameColumn: actualNameColumn,
+      nikColumn: actualNikColumn,
     };
 
     const {
@@ -150,20 +157,25 @@ export async function syncWorkspaceGoogleSheet(
     let alreadyInDbCount = 0;
 
     for (const row of deduplicatedSheetRows) {
-      const primaryKey = getParticipantUniqueKey(row, actualUniqueKey);
-      if (!primaryKey) continue;
+      // 1. Cek NIK (Prioritas Utama)
+      const rowNik = getParticipantNik(row, actualNikColumn);
+      if (rowNik && existingNikSet.has(rowNik)) {
+        alreadyInDbCount++;
+        continue;
+      }
 
+      // 2. Cek Gabungan ID Unik + Nama (Prioritas Kedua / Fallback)
       const compositeKey = getParticipantCompositeKey(row, sheetKeyOptions);
+      if (!compositeKey && !rowNik) continue;
 
-      // Cek apakah NIK/ID sudah ada di database (atau composite key sama)
-      if (existingKeySet.has(primaryKey) || (compositeKey && existingKeySet.has(compositeKey))) {
+      if (compositeKey && existingCompositeSet.has(compositeKey)) {
         alreadyInDbCount++;
         continue;
       }
 
       // Tandai agar tidak dimasukkan ganda dalam run yang sama
-      existingKeySet.add(primaryKey);
-      if (compositeKey) existingKeySet.add(compositeKey);
+      if (rowNik) existingNikSet.add(rowNik);
+      if (compositeKey) existingCompositeSet.add(compositeKey);
 
       // Compute participant completeness status
       const computedStatus = calculateParticipantStatus(workspaceFields as any, row);

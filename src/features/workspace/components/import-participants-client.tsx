@@ -70,6 +70,7 @@ import {
 import { Participant } from "@/types/domain";
 import {
   ParticipantKeyOptions,
+  getParticipantNik,
   getParticipantUniqueKey,
   getParticipantCompositeKey,
   deduplicateRowsPreservingLatest,
@@ -109,6 +110,7 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
   const [rawRows, setRawRows] = useState<Record<string, unknown>[]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
   const [selectedKeyField, setSelectedKeyField] = useState<string>("");
+  const [selectedNikField, setSelectedNikField] = useState<string>("auto");
   const [selectedNameField, setSelectedNameField] = useState<string>("");
   const [selectedPhotoField, setSelectedPhotoField] = useState<string>("none");
 
@@ -319,6 +321,12 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
       }
       setSelectedKeyField(detectedKey);
 
+      // Smart auto-detect nik field
+      let detectedNik = workspace?.nikColumn && cols.includes(workspace.nikColumn)
+        ? workspace.nikColumn
+        : "auto";
+      setSelectedNikField(detectedNik);
+
       // Smart auto-detect name field
       let detectedName = workspace?.nameColumn && cols.includes(workspace.nameColumn)
         ? workspace.nameColumn
@@ -354,6 +362,7 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
     const importKeyOptions: ParticipantKeyOptions = {
       uniqueKeyColumn: selectedKeyField,
       nameColumn: selectedNameField || undefined,
+      nikColumn: selectedNikField !== "auto" && selectedNikField !== "none" ? selectedNikField : undefined,
     };
 
     // 1. Bersihkan duplikat internal pada berkas dan buang kunci kosong (ambil baris kemunculan terakhir)
@@ -366,22 +375,25 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
       emptyKeyDiscarded,
     } = deduplicateRowsPreservingLatest(indexedRows, importKeyOptions);
 
-    // 2. Buat map existing participants berdasarkan primary key (ID/NIK) dan composite key
-    const existingMap = new Map<string, Participant>();
+    // 2. Buat map existing participants
+    // - nikMap: jika ada NIK, NIK yang sama langsung dicegat
+    // - compositeMap: jika tidak ada NIK atau NIK belum pernah ada, cegat berdasarkan ID + Nama
+    const existingNikMap = new Map<string, Participant>();
+    const existingCompositeMap = new Map<string, Participant>();
+
     existingParticipants.forEach((p) => {
       const pData = p.data as Record<string, unknown>;
-      const primaryKeyCol = workspace?.uniqueKeyColumn || selectedKeyField;
-      const primaryKey = getParticipantUniqueKey(pData, primaryKeyCol);
-      if (primaryKey) {
-        existingMap.set(primaryKey, p);
+      const pNik = getParticipantNik(pData, workspace?.nikColumn || importKeyOptions.nikColumn);
+      if (pNik) {
+        existingNikMap.set(pNik, p);
       }
 
       const pKey = getParticipantCompositeKey(pData, {
-        uniqueKeyColumn: primaryKeyCol,
+        uniqueKeyColumn: workspace?.uniqueKeyColumn || selectedKeyField,
         nameColumn: workspace?.nameColumn || selectedNameField || undefined,
       });
       if (pKey) {
-        existingMap.set(pKey, p);
+        existingCompositeMap.set(pKey, p);
       }
     });
 
@@ -393,12 +405,24 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
 
       const rawKeyValue = data[selectedKeyField] ?? "";
       const keyValue = String(rawKeyValue).trim();
-      const primaryKey = getParticipantUniqueKey(data, selectedKeyField);
-      const compositeKey = getParticipantCompositeKey(data, importKeyOptions);
 
-      const matchedParticipant =
-        (primaryKey ? existingMap.get(primaryKey) : undefined) ||
-        (compositeKey ? existingMap.get(compositeKey) : undefined);
+      // Cek Prioritas 1: NIK
+      const rowNik = getParticipantNik(data, importKeyOptions.nikColumn);
+      let matchedParticipant: Participant | undefined = undefined;
+      let duplicateReason: "workspace" | undefined = undefined;
+
+      if (rowNik && existingNikMap.has(rowNik)) {
+        matchedParticipant = existingNikMap.get(rowNik);
+        duplicateReason = "workspace";
+      } else {
+        // Cek Prioritas 2: Gabungan (ID Unik + Nama)
+        const compositeKey = getParticipantCompositeKey(data, importKeyOptions);
+        if (compositeKey && existingCompositeMap.has(compositeKey)) {
+          matchedParticipant = existingCompositeMap.get(compositeKey);
+          duplicateReason = "workspace";
+        }
+      }
+
       const isDuplicate = !!matchedParticipant;
 
       return {
@@ -406,10 +430,10 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
         data,
         keyValue,
         isDuplicate,
-        duplicateType: isDuplicate ? "workspace" : undefined,
+        duplicateType: duplicateReason,
         existingId: matchedParticipant?.id,
         existingParticipant: matchedParticipant,
-        action: isDuplicate ? "overwrite" : "create",
+        action: isDuplicate ? "skip" : "create",
       };
     });
 
@@ -500,6 +524,7 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
       // 1. Simpan konfigurasi pemetaan kolom identitas & urutan kolom import ke Workspace
       await api.updateWorkspace(workspaceId, {
         uniqueKeyColumn: selectedKeyField,
+        nikColumn: selectedNikField !== "auto" && selectedNikField !== "none" ? selectedNikField : undefined,
         nameColumn: selectedNameField,
         photoColumn: selectedPhotoField !== "none" ? selectedPhotoField : undefined,
         importHeaders: headers.length > 0 ? headers : undefined,
@@ -878,8 +903,8 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
                 </CardHeader>
 
                 <CardContent className="space-y-6 pt-5">
-                  {/* Selectors: Unique Identifier, Name, & Photo Mapping */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Selectors: Unique Identifier, NIK, Name, & Photo Mapping */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                     {/* 1. Kunci Unik */}
                     <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 flex flex-col justify-between gap-3">
                       <div className="space-y-1">
@@ -890,7 +915,7 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
                           </span>
                         </div>
                         <p className="text-[11px] text-muted-foreground leading-snug">
-                          Acuan identifier unik (misal: NIK, NIM, ID Peserta) untuk cek duplikasi & pencarian.
+                          Acuan ID/No Registrasi peserta untuk pencarian & display.
                         </p>
                       </div>
 
@@ -913,7 +938,49 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
                       </Select>
                     </div>
 
-                    {/* 2. Nama Peserta */}
+                    {/* 2. Kolom NIK (Kunci Utama) */}
+                    <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-4 flex flex-col justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5">
+                          <KeyRound className="w-4 h-4 text-emerald-600" />
+                          <span className="text-xs font-bold text-foreground">
+                            Kolom NIK
+                          </span>
+                          <Badge variant="outline" className="text-[9px] px-1 py-0 text-emerald-600 border-emerald-300">
+                            Utama
+                          </Badge>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground leading-snug">
+                          Jika ada, NIK sama otomatis di-skip. Default otomatis deteksi.
+                        </p>
+                      </div>
+
+                      <Select
+                        value={selectedNikField}
+                        onValueChange={(val) => {
+                          if (val) setSelectedNikField(val);
+                        }}
+                      >
+                        <SelectTrigger className="h-8 text-xs bg-background">
+                          <SelectValue placeholder="Pilih Kolom NIK" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="auto" className="text-xs font-medium text-emerald-600">
+                            ✨ Deteksi Otomatis (NIK/KTP)
+                          </SelectItem>
+                          <SelectItem value="none" className="text-xs italic text-muted-foreground">
+                            -- Tidak Ada NIK --
+                          </SelectItem>
+                          {headers.map((col) => (
+                            <SelectItem key={col} value={col} className="text-xs">
+                              {col}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* 3. Nama Peserta */}
                     <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 flex flex-col justify-between gap-3">
                       <div className="space-y-1">
                         <div className="flex items-center gap-1.5">
@@ -923,7 +990,7 @@ export function ImportParticipantsClient({ workspaceId }: { workspaceId: string 
                           </span>
                         </div>
                         <p className="text-[11px] text-muted-foreground leading-snug">
-                          Kolom nama lengkap untuk ditampilkan di header kartu profil form registrasi.
+                          Digabung dengan ID Unik jika NIK kosong.
                         </p>
                       </div>
 

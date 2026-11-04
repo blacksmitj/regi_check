@@ -55,6 +55,7 @@ export function WorkspaceGeneralSettingsClient({ workspaceId }: { workspaceId: s
   const [endDate, setEndDate] = useState("");
   const [status, setStatus] = useState<"active" | "archived">("active");
   const [uniqueKeyColumn, setUniqueKeyColumn] = useState("");
+  const [nikColumn, setNikColumn] = useState("");
   const [nameColumn, setNameColumn] = useState("");
   const [photoColumn, setPhotoColumn] = useState("");
   const [isSavedNotice, setIsSavedNotice] = useState(false);
@@ -120,6 +121,7 @@ export function WorkspaceGeneralSettingsClient({ workspaceId }: { workspaceId: s
     setEndDate(workspace.endDate || "");
     setStatus(workspace.status || "active");
     setUniqueKeyColumn(workspace.uniqueKeyColumn || "");
+    setNikColumn(workspace.nikColumn || "");
     setNameColumn(workspace.nameColumn || "");
     setPhotoColumn(workspace.photoColumn || "");
     setInitialized(true);
@@ -133,6 +135,7 @@ export function WorkspaceGeneralSettingsClient({ workspaceId }: { workspaceId: s
       endDate: string;
       status?: "active" | "archived";
       uniqueKeyColumn?: string;
+      nikColumn?: string;
       nameColumn?: string;
       photoColumn?: string;
     }) =>
@@ -154,6 +157,7 @@ export function WorkspaceGeneralSettingsClient({ workspaceId }: { workspaceId: s
       endDate,
       status,
       uniqueKeyColumn: uniqueKeyColumn.trim() || undefined,
+      nikColumn: nikColumn.trim() || undefined,
       nameColumn: nameColumn.trim() || undefined,
       photoColumn: photoColumn.trim() || undefined,
     });
@@ -300,10 +304,25 @@ export function WorkspaceGeneralSettingsClient({ workspaceId }: { workspaceId: s
                       id="ws-uniquekey"
                       value={uniqueKeyColumn}
                       onChange={(e) => setUniqueKeyColumn(e.target.value)}
-                      placeholder="Contoh: NIK, NIM, ID"
+                      placeholder="Contoh: ID Peserta, Nomor Registrasi"
                       className="text-xs h-8 bg-background"
                     />
-                    <FieldDescription className="text-[10px] text-muted-foreground">Header kolom unik di berkas peserta</FieldDescription>
+                    <FieldDescription className="text-[10px] text-muted-foreground">Header kolom unik peserta di berkas</FieldDescription>
+                  </Field>
+
+                  <Field className="space-y-1">
+                    <FieldLabel htmlFor="ws-nikcol" className="text-[11px] font-semibold flex items-center gap-1">
+                      <KeyRound className="w-3 h-3 text-emerald-600" />
+                      Kolom NIK (Kunci Utama Mutlak)
+                    </FieldLabel>
+                    <Input
+                      id="ws-nikcol"
+                      value={nikColumn}
+                      onChange={(e) => setNikColumn(e.target.value)}
+                      placeholder="Contoh: NIK, No KTP (Otomatis jika kosong)"
+                      className="text-xs h-8 bg-background"
+                    />
+                    <FieldDescription className="text-[10px] text-muted-foreground">Jika ada, NIK sama langsung ditolak</FieldDescription>
                   </Field>
 
                   <Field className="space-y-1">
@@ -318,7 +337,7 @@ export function WorkspaceGeneralSettingsClient({ workspaceId }: { workspaceId: s
                       placeholder="Contoh: Nama Lengkap"
                       className="text-xs h-8 bg-background"
                     />
-                    <FieldDescription className="text-[10px] text-muted-foreground">Header kolom nama di berkas peserta</FieldDescription>
+                    <FieldDescription className="text-[10px] text-muted-foreground">Digabung dgn ID Unik jika NIK kosong</FieldDescription>
                   </Field>
 
                   <Field className="space-y-1">
